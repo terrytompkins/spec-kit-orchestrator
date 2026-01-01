@@ -59,7 +59,13 @@ class ConfigManager:
                 'base_directory': str(Path.home() / 'spec-kit-workspace')
             },
             'ai_agents': {
-                'allowed_values': ['claude', 'gpt-4', 'gpt-3.5']
+                # Default to common code agents (not AI models)
+                'allowed_values': [
+                    'copilot', 'claude', 'gemini', 'cursor-agent',
+                    'qwen', 'opencode', 'codex', 'windsurf',
+                    'kilocode', 'auggie', 'codebuddy', 'qoder',
+                    'roo', 'q', 'amp', 'shai', 'bob'
+                ]
             },
             'secrets': {
                 'storage': 'environment',

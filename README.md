@@ -50,7 +50,7 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
 
 ### Admin Configuration
 
-Create a configuration file at `.specify/orchestrator/config.yml`:
+Create a configuration file at `.specify/orchestrator/config.yml` **in the orchestrator application directory** (not in the projects you create):
 
 ```yaml
 workspace:
@@ -67,7 +67,10 @@ secrets:
   mask_in_logs: true
 ```
 
-**Important**: The `base_directory` must be an absolute path. All user-provided project paths will be validated against this base directory to prevent directory traversal attacks.
+**Important Notes**:
+- This config file is for the **orchestrator tool itself**, located at: `<orchestrator-repo-root>/.specify/orchestrator/config.yml`
+- The `base_directory` must be an absolute path. All user-provided project paths will be validated against this base directory to prevent directory traversal attacks.
+- Projects created through the orchestrator will have their own `.specify/` directories (created by `specify init`), but those are separate from this orchestrator configuration.
 
 ### Environment Variables
 
