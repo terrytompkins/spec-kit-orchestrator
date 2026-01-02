@@ -1,14 +1,18 @@
 """Project creation page for Spec Kit Orchestrator."""
 
-import streamlit as st
+import sys
 from pathlib import Path
-from datetime import datetime
 
-from ..services.config_manager import ConfigManager
-from ..services.cli_executor import CLIExecutor, CLIExecutionError
-from ..services.run_metadata import RunMetadata
-from ..utils.path_validation import validate_path, PathValidationError
-from ..models.project import Project
+# Add parent directory to path for imports when running as Streamlit page
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import streamlit as st
+from datetime import datetime
+from orchestrator.services.config_manager import ConfigManager
+from orchestrator.services.cli_executor import CLIExecutor, CLIExecutionError
+from orchestrator.services.run_metadata import RunMetadata
+from orchestrator.utils.path_validation import validate_path, PathValidationError
+from orchestrator.models.project import Project
 import os
 
 
@@ -38,9 +42,10 @@ def main():
         )
         
         github_token = st.text_input(
-            "GitHub Token (Optional)",
+            "GitHub Token",
             type="password",
-            help="Optional GitHub token for Spec Kit initialization"
+            help="GitHub token for Spec Kit initialization. Required to fetch release information from GitHub API. You can also set GH_TOKEN or GITHUB_TOKEN environment variable.",
+            placeholder="Enter token or leave empty to use GH_TOKEN/GITHUB_TOKEN env var"
         )
         
         extra_params = st.text_area(
@@ -69,9 +74,26 @@ def main():
             errors.append(f"Invalid path: {str(e)}")
             project_path = None
         
+        # Check if project directory already exists and has content
+        if project_path and project_path.exists():
+            # Check if directory has any content (excluding hidden files like .specify from failed attempts)
+            dir_contents = [item for item in project_path.iterdir() if not item.name.startswith('.')]
+            if dir_contents:
+                errors.append(f"Directory '{project_name}' already exists and contains files. Please choose a different project name or remove the existing directory.")
+            # If it only has hidden files (like .specify from a previous failed attempt), we'll clean it up
+        
         # Validate AI agent
         if not config_manager.is_ai_agent_allowed(ai_agent):
             errors.append(f"AI agent '{ai_agent}' is not in allowed list")
+        
+        # Check if GitHub token is available (from form or environment)
+        if not github_token:
+            github_token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+            if github_token:
+                st.info("ℹ️ Using GitHub token from environment variable (GH_TOKEN or GITHUB_TOKEN)")
+            else:
+                st.warning("⚠️ **Warning**: No GitHub token provided. Spec Kit initialization may fail when fetching release information from GitHub API. Consider providing a token or setting GH_TOKEN/GITHUB_TOKEN environment variable.")
+                # Don't block execution, but warn the user
         
         # Display errors if any
         if errors:
@@ -87,15 +109,26 @@ def main():
             
             The `specify` command is not available in your PATH.
             
-            Please install Spec Kit following the [official documentation](https://github.com/spec-kit/spec-kit).
+            Please install Spec Kit following the [official documentation](https://github.com/github/spec-kit).
             """)
             return
         
         # Execute specify init
         st.subheader("Initializing Project...")
         
-        # Build command
-        command = ['specify', 'init']
+        # Clean up any leftover directories/files from previous failed attempts
+        # specify init requires an empty directory (or will prompt for confirmation)
+        if project_path.exists():
+            import shutil
+            # Remove the entire directory to ensure it's completely clean
+            shutil.rmtree(project_path)
+        
+        # Create project directory (now guaranteed to be empty)
+        project_path.mkdir(parents=True, exist_ok=True)
+        
+        # Build command - specify init requires either a project name, '.', or --here flag
+        # Since we're running inside the project directory, we'll use --here
+        command = ['specify', 'init', '--here']
         command.extend(['--ai', ai_agent])
         
         if github_token:
@@ -111,98 +144,132 @@ def main():
                 st.error(f"Invalid extra parameters: {str(e)}")
                 return
         
-        # Add project name as positional argument if Spec Kit requires it
-        # (Adjust based on actual Spec Kit CLI interface)
-        command.append(project_name)
-        
-        # Create output container for streaming
-        output_container = st.empty()
-        output_lines = []
-        
-        # Create run metadata manager
-        run_metadata = RunMetadata(project_path)
-        run_dir = run_metadata.create_run_directory()
-        stdout_log_path = run_dir / 'stdout.log'
-        stderr_log_path = run_dir / 'stderr.log'
+        # Create temporary log files in parent directory to avoid making project directory non-empty
+        # We'll move them to the proper location after specify init completes
+        import tempfile
+        temp_dir = Path(tempfile.mkdtemp(prefix='spec-kit-init-'))
+        temp_stdout_log = temp_dir / 'stdout.log'
+        temp_stderr_log = temp_dir / 'stderr.log'
+        temp_stdout_log.touch()
+        temp_stderr_log.touch()
         
         start_timestamp = datetime.now()
         
-        # Stream output callback
+        # Stream output callback - only collect data, don't update UI from thread
         def output_callback(line):
-            output_lines.append(line)
-            with open(stdout_log_path, 'a', encoding='utf-8') as f:
+            with open(temp_stdout_log, 'a', encoding='utf-8') as f:
                 f.write(line + '\n')
-            # Update UI incrementally
-            output_container.code('\n'.join(output_lines))
         
         def error_callback(line):
-            output_lines.append(f"[stderr] {line}")
-            with open(stderr_log_path, 'a', encoding='utf-8') as f:
+            with open(temp_stderr_log, 'a', encoding='utf-8') as f:
                 f.write(line + '\n')
-            # Update UI incrementally
-            output_container.code('\n'.join(output_lines))
         
-        # Execute command
-        try:
-            exit_code, stdout, stderr = executor.execute(
-                command,
-                working_directory=validated_path,
-                output_callback=output_callback,
-                error_callback=error_callback
-            )
-            
-            end_timestamp = datetime.now()
-            
-            # Collect non-secret environment variables
-            env_vars = {}
-            secret_keywords = ['TOKEN', 'KEY', 'SECRET', 'PASSWORD', 'CREDENTIAL']
-            for k, v in os.environ.items():
-                if not any(keyword in k.upper() for keyword in secret_keywords):
-                    env_vars[k] = v
-            
-            # Create execution metadata
-            metadata = run_metadata.create_metadata(
-                phase_name="init",
-                command=' '.join(command),
-                args=command[1:],  # Exclude 'specify'
-                working_directory=validated_path,
-                environment_vars=env_vars,
-                start_timestamp=start_timestamp,
-                end_timestamp=end_timestamp,
-                exit_code=exit_code,
-                stdout_log_path=stdout_log_path,
-                stderr_log_path=stderr_log_path,
-                run_dir=run_dir
-            )
-            
-            run_metadata.save_metadata(metadata, run_dir)
-            
-            if exit_code == 0:
-                st.success(f"✅ Project '{project_name}' created successfully!")
-                st.info(f"**Project Path**: `{project_path}`")
+        # Execute command with status indicator
+        exit_code = None
+        stdout = []
+        stderr = []
+        
+        # Show a note that this may take a while
+        st.info("⏳ Initializing project... This may take a minute. Output will be displayed when complete.")
+        
+        with st.status("Initializing project...", expanded=True) as status:
+            try:
+                exit_code, stdout, stderr = executor.execute(
+                    command,
+                    working_directory=project_path,  # Run inside the project directory  # Run inside the project directory
+                    output_callback=output_callback,
+                    error_callback=error_callback
+                )
                 
-                # Set project in session state
-                st.session_state.selected_project = project_name
-                st.session_state.project_path = str(project_path)
-                
-                st.markdown("### Next Steps")
-                st.markdown("""
-                1. Navigate to **Phase Runner** to run Spec Kit phases
-                2. Or go to **Interview Chat** to generate parameter documents
-                """)
-            else:
-                st.error(f"❌ Project creation failed with exit code {exit_code}")
+                # Display output after execution completes (in main thread)
+                # Use a container with constrained width to prevent horizontal stretching
+                if stdout:
+                    with st.container():
+                        st.markdown("**Command Output:**")
+                        # Use markdown code block with language for better formatting
+                        st.markdown(f"```\n{chr(10).join(stdout)}\n```")
                 if stderr:
-                    with st.expander("Error Details"):
-                        st.code('\n'.join(stderr))
+                    st.warning("Errors occurred:")
+                    with st.container():
+                        st.markdown(f"```\n{chr(10).join(stderr)}\n```")
+                end_timestamp = datetime.now()
+                
+                # Now that specify init has completed, create run metadata in the proper location
+                run_metadata = RunMetadata(project_path)
+                run_dir = run_metadata.create_run_directory()
+                stdout_log_path = run_dir / 'stdout.log'
+                stderr_log_path = run_dir / 'stderr.log'
+                
+                # Move temporary log files to proper location
+                import shutil
+                if temp_stdout_log.exists():
+                    shutil.move(str(temp_stdout_log), str(stdout_log_path))
+                if temp_stderr_log.exists():
+                    shutil.move(str(temp_stderr_log), str(stderr_log_path))
+                
+                # Clean up temp directory
+                try:
+                    temp_dir.rmdir()
+                except OSError:
+                    pass  # Directory not empty, that's okay
+                
+                # Collect non-secret environment variables
+                env_vars = {}
+                secret_keywords = ['TOKEN', 'KEY', 'SECRET', 'PASSWORD', 'CREDENTIAL']
+                for k, v in os.environ.items():
+                    if not any(keyword in k.upper() for keyword in secret_keywords):
+                        env_vars[k] = v
+                
+                # Create execution metadata
+                metadata = run_metadata.create_metadata(
+                    phase_name="init",
+                    command=' '.join(command),
+                    args=command[1:],  # Exclude 'specify'
+                    working_directory=project_path,
+                    environment_vars=env_vars,
+                    start_timestamp=start_timestamp,
+                    end_timestamp=end_timestamp,
+                    exit_code=exit_code,
+                    stdout_log_path=stdout_log_path,
+                    stderr_log_path=stderr_log_path,
+                    run_dir=run_dir
+                )
+                
+                run_metadata.save_metadata(metadata, run_dir)
+                
+                if exit_code == 0:
+                    status.update(label="✅ Project created successfully!", state="complete")
+                else:
+                    status.update(label=f"❌ Project creation failed (exit code {exit_code})", state="error")
+            
+            except CLIExecutionError as e:
+                exit_code = -1
+                status.update(label=f"❌ Execution error: {str(e)}", state="error")
+                st.error(f"Execution error: {str(e)}")
+            except Exception as e:
+                exit_code = -1
+                status.update(label=f"❌ Unexpected error: {str(e)}", state="error")
+                import traceback
+                st.error(f"Unexpected error: {str(e)}")
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())
         
-        except CLIExecutionError as e:
-            st.error(f"❌ Execution error: {str(e)}")
-        except Exception as e:
-            st.error(f"❌ Unexpected error: {str(e)}")
-            import traceback
-            with st.expander("Error Details"):
-                st.code(traceback.format_exc())
+        # Display results after status context (in main thread)
+        if exit_code == 0:
+            st.success(f"✅ Project '{project_name}' created successfully!")
+            st.info(f"**Project Path**: `{project_path}`")
+            
+            # Set project in session state
+            st.session_state.selected_project = project_name
+            st.session_state.project_path = str(project_path)
+            
+            st.markdown("### Next Steps")
+            st.markdown("""
+            1. Navigate to **Phase Runner** to run Spec Kit phases
+            2. Or go to **Interview Chat** to generate parameter documents
+            """)
+        elif exit_code is not None:
+            st.error(f"❌ Project creation failed with exit code {exit_code}")
 
 
 if __name__ == "__main__":

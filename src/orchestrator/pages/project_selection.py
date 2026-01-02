@@ -1,15 +1,26 @@
 """Project selection page for Spec Kit Orchestrator."""
 
-import streamlit as st
+import sys
 from pathlib import Path
 
-from ..services.project_discovery import ProjectDiscovery
-from ..services.config_manager import ConfigManager
+# Add parent directory to path for imports when running as Streamlit page
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import streamlit as st
+from orchestrator.services.project_discovery import ProjectDiscovery
+from orchestrator.services.config_manager import ConfigManager
 
 
 def main():
     """Main project selection page."""
     st.title("📁 Select Project")
+    
+    # Show current project if one is selected
+    if st.session_state.get('selected_project'):
+        st.info(f"📂 **Current Project**: {st.session_state.selected_project}")
+        if st.session_state.get('project_path'):
+            st.caption(f"Path: `{st.session_state.project_path}`")
+        st.markdown("---")
     
     config_manager = ConfigManager()
     discovery = ProjectDiscovery(config_manager)
@@ -57,7 +68,8 @@ def main():
                 if st.button("Select", key=f"select_{project.name}"):
                     st.session_state.selected_project = project.name
                     st.session_state.project_path = str(project.path)
-                    st.success(f"✅ Selected project: {project.name}")
+                    # Store success message in session state to persist after rerun
+                    st.session_state['project_selected_message'] = f"✅ Successfully selected project: **{project.name}**"
                     st.rerun()
     
     # Quick select dropdown
@@ -69,8 +81,15 @@ def main():
         selected_project = next(p for p in projects if p.name == selected_name)
         st.session_state.selected_project = selected_project.name
         st.session_state.project_path = str(selected_project.path)
-        st.success(f"✅ Loaded project: {selected_project.name}")
+        # Store success message in session state to persist after rerun
+        st.session_state['project_selected_message'] = f"✅ Successfully loaded project: **{selected_project.name}**"
         st.rerun()
+    
+    # Show success message if project was just selected
+    if st.session_state.get('project_selected_message'):
+        st.success(st.session_state['project_selected_message'])
+        # Clear the message after showing it
+        del st.session_state['project_selected_message']
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 import yaml
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 def load_yaml(file_path: Path) -> Dict[str, Any]:

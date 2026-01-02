@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 from ..utils.yaml_parser import save_yaml
 

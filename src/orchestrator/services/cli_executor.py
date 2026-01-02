@@ -61,6 +61,7 @@ class CLIExecutor:
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,  # Prevent waiting for input
                 text=True,
                 bufsize=1,  # Line buffered
                 universal_newlines=True,

@@ -1,14 +1,25 @@
 """Interview chat page for generating parameter documents."""
 
-import streamlit as st
+import sys
 from pathlib import Path
 
-from ..services.parameter_generator import ParameterGenerator
+# Add parent directory to path for imports when running as Streamlit page
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import streamlit as st
+from orchestrator.services.parameter_generator import ParameterGenerator
 
 
 def main():
     """Main interview chat page."""
     st.title("💬 Generate Parameter Documents")
+    
+    # Show current project header
+    if st.session_state.get('selected_project'):
+        st.info(f"📂 **Current Project**: {st.session_state.selected_project}")
+        if st.session_state.get('project_path'):
+            st.caption(f"Path: `{st.session_state.project_path}`")
+        st.markdown("---")
     
     # Check if project is selected
     if 'project_path' not in st.session_state or not st.session_state.project_path:

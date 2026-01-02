@@ -42,7 +42,7 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
 
 4. **Verify Spec Kit CLI is installed**:
    ```bash
-   specify --version
+   specify verify
    ```
    If not installed, follow the [Spec Kit installation instructions](https://github.com/github/spec-kit).
 

@@ -1,15 +1,26 @@
 """Artifact browser page for Spec Kit Orchestrator."""
 
-import streamlit as st
+import sys
 from pathlib import Path
 
-from ..services.artifact_reader import ArtifactReader
-from ..services.run_metadata import RunMetadata
+# Add parent directory to path for imports when running as Streamlit page
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import streamlit as st
+from orchestrator.services.artifact_reader import ArtifactReader
+from orchestrator.services.run_metadata import RunMetadata
 
 
 def main():
     """Main artifact browser page."""
     st.title("📄 Browse Artifacts")
+    
+    # Show current project header
+    if st.session_state.get('selected_project'):
+        st.info(f"📂 **Current Project**: {st.session_state.selected_project}")
+        if st.session_state.get('project_path'):
+            st.caption(f"Path: `{st.session_state.project_path}`")
+        st.markdown("---")
     
     # Check if project is selected
     if 'project_path' not in st.session_state or not st.session_state.project_path:
