@@ -9,7 +9,7 @@ workspace:
   # All projects must be created within this directory (security constraint)
   # Use an absolute path (e.g., /Users/username/spec-kit-projects)
   # Default if not set: ~/spec-kit-workspace
-  base_directory: "/Users/ttompkins/spec-kit-workspace"
+  base_directory: "/home/ttompkins/src/GenAI/spec-kit-workspace"
 
 # AI Agent Configuration
 # Defines which AI code agents are allowed for Spec Kit commands

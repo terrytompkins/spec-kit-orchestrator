@@ -18,7 +18,7 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
 ## Requirements
 
 - **Python**: 3.11 or higher
-- **Spec Kit CLI**: Must be installed and available in PATH (see [Spec Kit documentation](https://github.com/spec-kit/spec-kit) for installation)
+- **Spec Kit CLI**: Must be installed and available in PATH (see [Spec Kit documentation](https://github.com/github/spec-kit) for installation)
 - **Operating System**: macOS, Linux, or Windows
 
 ## Installation
@@ -44,7 +44,7 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
    ```bash
    specify --version
    ```
-   If not installed, follow the [Spec Kit installation instructions](https://github.com/spec-kit/spec-kit).
+   If not installed, follow the [Spec Kit installation instructions](https://github.com/github/spec-kit).
 
 ## Configuration
 
@@ -74,7 +74,23 @@ secrets:
 
 ### Environment Variables
 
-Secrets (GitHub tokens, API keys) should be stored in environment variables, not in configuration files:
+Secrets (GitHub tokens, API keys) should be stored in environment variables, not in configuration files. The application supports loading environment variables from a `.env` file in the project root directory.
+
+**Option 1: Using a `.env` file (recommended)**
+
+Create a `.env` file in the project root directory:
+
+```bash
+# .env
+GITHUB_TOKEN=your-token-here
+OPENAI_API_KEY=your-key-here  # If using OpenAI-based agents
+```
+
+The `.env` file is automatically loaded when the application starts and is already included in `.gitignore` to prevent committing secrets.
+
+**Option 2: Using system environment variables**
+
+Alternatively, you can set environment variables in your shell:
 
 ```bash
 export GITHUB_TOKEN="your-token-here"
@@ -222,7 +238,7 @@ This project adheres to the following principles (see `.specify/memory/constitut
 
 If you see an error that the Spec Kit CLI is not installed:
 1. Verify `specify` command is in your PATH
-2. Install Spec Kit following the [official documentation](https://github.com/spec-kit/spec-kit)
+2. Install Spec Kit following the [official documentation](https://github.com/github/spec-kit)
 3. Restart the Streamlit application
 
 ### Permission Errors
@@ -253,7 +269,7 @@ This is an internal tool (at least for v1). For contributions:
 
 ## Related Projects
 
-- [Spec Kit](https://github.com/spec-kit/spec-kit): The underlying CLI tool that this orchestrator manages
+- [Spec Kit](https://github.com/github/spec-kit): The underlying CLI tool that this orchestrator manages
 
 ---
 

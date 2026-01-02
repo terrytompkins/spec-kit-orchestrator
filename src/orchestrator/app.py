@@ -1,7 +1,13 @@
 """Main Streamlit app entry point for Spec Kit Orchestrator."""
 
-import streamlit as st
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists
+# This must be done before any other imports that might use environment variables
+load_dotenv()
+
+import streamlit as st
 
 # Set page config
 st.set_page_config(
