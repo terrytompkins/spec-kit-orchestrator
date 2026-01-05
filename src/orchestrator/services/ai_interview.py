@@ -14,13 +14,13 @@ class AIInterviewService:
     
     PHASES = ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze']
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o"):
         """
         Initialize AI interview service.
         
         Args:
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
-            model: OpenAI model to use (default: gpt-4o-mini for cost efficiency)
+            model: OpenAI model to use (default: gpt-4o for quality. Use gpt-4o-mini for lower cost)
         """
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         if not self.api_key:
@@ -30,23 +30,28 @@ class AIInterviewService:
         self.model = model
         
         # System prompt for the interview
-        self.system_prompt = """You are a helpful assistant that interviews users about their software project or feature to generate Spec Kit command parameters.
+        self.system_prompt = """You are an expert product analyst conducting a deep-dive interview to generate comprehensive Spec Kit command parameters.
 
-Your goal is to ask thoughtful questions to understand:
-1. What the project/feature is about
-2. Key requirements and constraints
-3. Technical context and dependencies
-4. Success criteria and goals
+Your goal is to ask probing, thoughtful questions to deeply understand:
+1. **Project Purpose**: What problem does this solve? Who is the target user? What are the pain points?
+2. **Requirements & Features**: What are the core features? What are nice-to-haves? What are non-goals?
+3. **User Experience**: What is the user journey? How should users feel when using this? What UX principles matter?
+4. **Technical Context**: What technologies, frameworks, constraints? What integrations are needed? What's the architecture?
+5. **Constraints & Limitations**: What are the technical, business, or resource constraints? What's out of scope?
+6. **Success Criteria**: How will success be measured? What metrics matter? What does "done" look like?
 
-After gathering sufficient information, you will help generate parameter documents for Spec Kit phases:
-- Constitution: Project principles and governance
-- Specify: Feature specification details
-- Clarify: Clarification questions
-- Plan: Implementation planning context
-- Tasks: Task breakdown requirements
-- Analyze: Analysis focus areas
+IMPORTANT: Ask DEEP, PROBING questions. Don't accept surface-level answers. Follow up with "why?", "how?", "what if?" questions. 
+Dig into details, edge cases, and implications. Aim for 8-12 meaningful exchanges before generating parameters.
 
-Ask questions one at a time, be conversational, and gather comprehensive information before generating parameters."""
+The Spec Kit phases need:
+- **Constitution**: Detailed principles, governance, constraints, non-goals, UX guidelines
+- **Specify**: Comprehensive feature specs, user stories, acceptance criteria, edge cases
+- **Clarify**: Specific open questions, ambiguous areas, decisions needed
+- **Plan**: Detailed implementation approach, architecture, technical decisions, migration paths
+- **Tasks**: Structured task breakdown with dependencies and priorities
+- **Analyze**: Specific metrics, success criteria, evaluation methods
+
+Ask ONE question at a time. Be conversational but thorough. Only suggest generating parameters when you have comprehensive, detailed information."""
     
     def get_initial_question(self) -> str:
         """Get the first question to start the interview."""
@@ -83,7 +88,7 @@ Ask questions one at a time, be conversational, and gather comprehensive informa
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1000
+                max_tokens=1500  # Increased for more detailed questions
             )
             
             assistant_message = response.choices[0].message.content
@@ -120,30 +125,45 @@ Ask questions one at a time, be conversational, and gather comprehensive informa
         Returns:
             True if ready to generate parameters
         """
-        # Simple heuristic: if assistant mentions generating parameters or we have enough context
+        # Count meaningful user responses (exclude very short ones)
+        user_messages = [msg for msg in history if msg.get("role") == "user" and len(msg.get("content", "")) > 20]
+        
         lower_message = assistant_message.lower()
-        if any(phrase in lower_message for phrase in [
+        
+        # Only generate if assistant explicitly says so AND we have substantial conversation
+        explicit_indicators = [
             "generate parameters",
             "create the parameter",
             "i'll generate",
             "here are the parameters",
-            "let me generate"
-        ]):
-            return True
+            "let me generate",
+            "finalize these parameters",
+            "ready to generate",
+            "generate the command parameters"
+        ]
         
-        # Also check if we have substantial conversation (at least 4 exchanges)
-        user_messages = [msg for msg in history if msg.get("role") == "user"]
-        if len(user_messages) >= 4:
-            # Check if assistant is wrapping up
-            if any(phrase in lower_message for phrase in [
-                "based on what",
-                "now i'll",
-                "let me create",
-                "i'll now generate"
-            ]):
-                return True
+        # Require at least 6-8 meaningful exchanges before considering completion
+        has_enough_exchanges = len(user_messages) >= 6
         
-        return False
+        # Check for explicit generation intent
+        has_explicit_intent = any(phrase in lower_message for phrase in explicit_indicators)
+        
+        # Also check for user explicitly asking to generate
+        if history:
+            last_user_msg = history[-1].get("content", "").lower() if history[-1].get("role") == "user" else ""
+            user_wants_generate = any(phrase in last_user_msg for phrase in [
+                "generate",
+                "create parameters",
+                "let's go",
+                "yes - let's",
+                "proceed",
+                "go ahead"
+            ])
+        else:
+            user_wants_generate = False
+        
+        # Generate if: (explicit intent AND enough exchanges) OR (user explicitly requests AND enough exchanges)
+        return (has_explicit_intent and has_enough_exchanges) or (user_wants_generate and has_enough_exchanges)
     
     def _generate_parameters(self, full_conversation: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
         """
@@ -156,26 +176,65 @@ Ask questions one at a time, be conversational, and gather comprehensive informa
             Dictionary mapping phase names to parameter dictionaries
         """
         # Create a prompt to extract parameters
-        extraction_prompt = """Based on our conversation, generate Spec Kit command parameters for all phases.
+        extraction_prompt = """Based on our comprehensive conversation, generate detailed, structured Spec Kit command parameters for all phases.
 
-For each phase, provide appropriate parameters that would help Spec Kit understand the project context:
+Generate RICH, SPECIFIC parameters that capture the full depth of our discussion. Each phase should be comprehensive and actionable.
 
-1. **Constitution Phase**: Project principles, governance rules, coding standards, team guidelines
-2. **Specify Phase**: Detailed feature specification, requirements, user stories, acceptance criteria
-3. **Clarify Phase**: Areas that need clarification, open questions, ambiguous requirements
-4. **Plan Phase**: Implementation approach, architecture decisions, technical constraints
-5. **Tasks Phase**: Task breakdown structure, dependencies, priorities
-6. **Analyze Phase**: Analysis focus areas, metrics to track, success criteria
+**CONSTITUTION Phase**: Create a detailed constitution that includes:
+- Clear project purpose and problem statement
+- Target users and their needs
+- Core principles and values (UX, technical, business)
+- Non-goals (what this is NOT)
+- Constraints (technical, resource, scope)
+- Governance rules and standards
+- UX principles and guidelines
+Format as a readable document that both humans and AI can understand.
 
-Format your response as a structured description for each phase that can be used as command parameters. Be specific and comprehensive based on the conversation.
+**SPECIFY Phase**: Provide comprehensive specifications including:
+- Detailed feature descriptions
+- User stories and scenarios
+- Acceptance criteria
+- Edge cases and error handling
+- User flows and interactions
+- Data requirements
+
+**CLARIFY Phase**: List specific areas needing clarification:
+- Open questions that need answers
+- Ambiguous requirements
+- Decisions that need to be made
+- Trade-offs to consider
+- Risks and unknowns
+
+**PLAN Phase**: Detail the implementation approach:
+- Architecture and technical decisions
+- Technology choices and rationale
+- Development phases or milestones
+- Migration paths (if applicable)
+- Integration points
+- Performance and scalability considerations
+
+**TASKS Phase**: Provide structured task breakdown:
+- Major work areas
+- Task dependencies
+- Priorities and sequencing
+- Deliverables for each task
+
+**Analyze Phase**: Define analysis and evaluation:
+- Success metrics and KPIs
+- How to measure effectiveness
+- User feedback mechanisms
+- Quality criteria
+- Evaluation methods
+
+For each phase, write comprehensive, detailed content (not just bullet points). The Constitution especially should be a well-structured document similar to a project charter.
 
 Respond in this format:
-CONSTITUTION: [parameters for constitution phase]
-SPECIFY: [parameters for specify phase]
-CLARIFY: [parameters for clarify phase]
-PLAN: [parameters for plan phase]
-TASKS: [parameters for tasks phase]
-ANALYZE: [parameters for analyze phase]"""
+CONSTITUTION: [comprehensive constitution document]
+SPECIFY: [detailed specifications]
+CLARIFY: [specific clarification needs]
+PLAN: [detailed implementation plan]
+TASKS: [structured task breakdown]
+ANALYZE: [analysis and evaluation criteria]"""
         
         messages = full_conversation + [{"role": "user", "content": extraction_prompt}]
         
@@ -184,7 +243,7 @@ ANALYZE: [parameters for analyze phase]"""
                 model=self.model,
                 messages=messages,
                 temperature=0.3,  # Lower temperature for more consistent extraction
-                max_tokens=2000
+                max_tokens=4000  # Increased for more detailed output
             )
             
             extracted_text = response.choices[0].message.content
@@ -232,19 +291,34 @@ ANALYZE: [parameters for analyze phase]"""
             # Find the section for this phase
             phase_content = None
             for keyword in phase_keywords:
-                pattern = f"{keyword}:"
-                if pattern in extracted_text:
-                    # Extract content after the keyword
-                    start_idx = extracted_text.find(pattern) + len(pattern)
-                    # Find next phase or end of text
-                    next_phase_idx = len(extracted_text)
-                    for other_keyword in ['CONSTITUTION:', 'SPECIFY:', 'CLARIFY:', 'PLAN:', 'TASKS:', 'ANALYZE:']:
-                        if other_keyword in extracted_text[start_idx:]:
-                            idx = extracted_text.find(other_keyword, start_idx)
-                            if idx < next_phase_idx:
-                                next_phase_idx = idx
-                    
-                    phase_content = extracted_text[start_idx:next_phase_idx].strip()
+                # Try both uppercase and title case
+                patterns = [f"{keyword.upper()}:", f"{keyword.title()}:", f"{keyword}:"]
+                for pattern in patterns:
+                    if pattern in extracted_text:
+                        # Extract content after the keyword
+                        start_idx = extracted_text.find(pattern) + len(pattern)
+                        # Find next phase or end of text
+                        next_phase_idx = len(extracted_text)
+                        for other_keyword in ['CONSTITUTION:', 'SPECIFY:', 'CLARIFY:', 'PLAN:', 'TASKS:', 'ANALYZE:']:
+                            if other_keyword in extracted_text[start_idx:]:
+                                idx = extracted_text.find(other_keyword, start_idx)
+                                if idx < next_phase_idx:
+                                    next_phase_idx = idx
+                        
+                        phase_content = extracted_text[start_idx:next_phase_idx].strip()
+                        # Clean up: remove leading dashes or numbers if present
+                        lines = phase_content.split('\n')
+                        cleaned_lines = []
+                        for line in lines:
+                            # Remove common markdown list prefixes
+                            line = line.lstrip('- ').lstrip('* ').lstrip('• ').lstrip()
+                            # Remove numbered list prefixes
+                            if line and line[0].isdigit() and ('.' in line[:3] or ')' in line[:3]):
+                                line = line.split('.', 1)[-1].split(')', 1)[-1].lstrip()
+                            cleaned_lines.append(line)
+                        phase_content = '\n'.join(cleaned_lines).strip()
+                        break
+                if phase_content:
                     break
             
             # If no specific content found, use a default based on project description

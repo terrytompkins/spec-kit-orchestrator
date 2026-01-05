@@ -203,8 +203,10 @@ def main():
     st.info("""
     **AI-Powered Interview Chat**
     
-    I'll ask you questions about your project or feature, and then generate Spec Kit command parameter documents for all phases.
-    Let's get started!
+    I'll conduct a thorough interview, asking deep, probing questions about your project or feature to understand all the nuances and details. 
+    This will help generate comprehensive, high-quality Spec Kit command parameter documents for all phases.
+    
+    **Note**: The interview will ask 8-12 questions to gather comprehensive information. Please provide detailed answers for best results.
     """)
     
     # Initialize conversation if empty
