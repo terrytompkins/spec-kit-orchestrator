@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Any
 import yaml
 
 from ..utils.yaml_parser import load_yaml
+from ..utils.path_validation import normalize_macos_path
 
 
 class ConfigManager:
@@ -78,13 +79,15 @@ class ConfigManager:
         Get base workspace directory.
         
         Returns:
-            Path to base directory
+            Path to base directory (normalized to avoid macOS system volume issues)
         """
         config = self.load_config()
         base_dir = config.get('workspace', {}).get('base_directory')
         if base_dir:
-            return Path(base_dir)
-        return Path(self._get_defaults()['workspace']['base_directory'])
+            # Resolve and normalize to handle macOS system volume paths
+            return normalize_macos_path(Path(base_dir).expanduser().resolve())
+        default_path = Path(self._get_defaults()['workspace']['base_directory'])
+        return normalize_macos_path(default_path.expanduser().resolve())
     
     def get_allowed_ai_agents(self) -> List[str]:
         """
