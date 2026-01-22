@@ -8,9 +8,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import os
 import streamlit as st
+from orchestrator.utils.navigation import hide_streamlit_navigation
+
+# Hide Streamlit navigation immediately to prevent flash
+hide_streamlit_navigation()
+
 from dotenv import load_dotenv
 from orchestrator.services.parameter_generator import ParameterGenerator
 from orchestrator.services.ai_interview import AIInterviewService
+from orchestrator.utils.navigation import render_navigation_sidebar
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +36,11 @@ def initialize_chat_state():
 
 def main():
     """Main interview chat page."""
+    # Render navigation sidebar
+    render_navigation_sidebar()
+    
+    initialize_chat_state()
+    
     st.title("💬 Generate Parameter Documents")
     
     # Show current project header
@@ -54,8 +65,7 @@ def main():
     
     generator = ParameterGenerator(project_path)
     
-    # Initialize chat state
-    initialize_chat_state()
+    # Chat state already initialized at the start of main()
     
     # Check for API key: first from environment variable (.env file), then sidebar input, then session state
     env_api_key = os.getenv('OPENAI_API_KEY')

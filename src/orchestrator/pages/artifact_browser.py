@@ -7,12 +7,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
+from orchestrator.utils.navigation import hide_streamlit_navigation
+
+# Hide Streamlit navigation immediately to prevent flash
+hide_streamlit_navigation()
+
 from orchestrator.services.artifact_reader import ArtifactReader
 from orchestrator.services.run_metadata import RunMetadata
+from orchestrator.utils.navigation import render_navigation_sidebar
 
 
 def main():
     """Main artifact browser page."""
+    # Render navigation sidebar
+    render_navigation_sidebar()
+    
     st.title("📄 Browse Artifacts")
     
     # Show current project header

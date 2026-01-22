@@ -1,7 +1,15 @@
 """Main Streamlit app entry point for Spec Kit Orchestrator."""
 
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Add src/ directory to path for imports
+# This allows imports like "from orchestrator.utils.navigation import ..."
+# app.py is at src/orchestrator/app.py, so parent.parent is src/
+src_path = Path(__file__).parent.parent.resolve()
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
 
 # Load environment variables from .env file if it exists
 # This must be done before any other imports that might use environment variables
@@ -14,8 +22,19 @@ st.set_page_config(
     page_title="Spec Kit Orchestrator",
     page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
 )
+
+# Import and apply navigation CSS immediately to prevent flash
+from orchestrator.utils.navigation import hide_streamlit_navigation, render_navigation_sidebar
+
+# Hide Streamlit navigation immediately after page config
+hide_streamlit_navigation()
 
 # Initialize session state
 if 'selected_project' not in st.session_state:
@@ -23,44 +42,12 @@ if 'selected_project' not in st.session_state:
 if 'project_path' not in st.session_state:
     st.session_state.project_path = None
 
+# Render navigation sidebar (consistent across all pages)
+render_navigation_sidebar()
+
 # Main title
 st.title("🎯 Spec Kit Orchestrator")
 st.markdown("A non-technical UI for managing Spec Kit workflows")
-
-# Sidebar navigation
-st.sidebar.title("Navigation")
-
-# Show current project status in sidebar
-st.sidebar.markdown("---")
-if st.session_state.selected_project:
-    st.sidebar.success(f"📂 **Current Project**\n\n{st.session_state.selected_project}")
-    if st.session_state.project_path:
-        # Show truncated path if it's long
-        path_display = st.session_state.project_path
-        if len(path_display) > 40:
-            path_display = "..." + path_display[-37:]
-        st.sidebar.caption(f"`{path_display}`")
-    if st.sidebar.button("🔄 Clear Project", use_container_width=True):
-        st.session_state.selected_project = None
-        st.session_state.project_path = None
-        st.rerun()
-else:
-    st.sidebar.info("👈 No project selected")
-st.sidebar.markdown("---")
-
-# Note: Streamlit's multi-page support automatically creates navigation
-# from files in the pages/ directory. This main app.py serves as the
-# home page and can redirect to project selection if no project is selected.
-
-# Check if we're on the home page (no page selected)
-if st.sidebar.button("🏠 Home", use_container_width=True):
-    st.switch_page("app.py")
-
-if st.sidebar.button("📁 Select Project", use_container_width=True):
-    st.switch_page("pages/project_selection.py")
-
-if st.sidebar.button("➕ New Project", use_container_width=True):
-    st.switch_page("pages/project_creation.py")
 
 # Main content
 if st.session_state.selected_project is None:
