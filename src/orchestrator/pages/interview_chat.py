@@ -8,15 +8,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import os
 import streamlit as st
-from orchestrator.utils.navigation import hide_streamlit_navigation
-
-# Hide Streamlit navigation immediately to prevent flash
-hide_streamlit_navigation()
-
 from dotenv import load_dotenv
 from orchestrator.services.parameter_generator import ParameterGenerator
 from orchestrator.services.ai_interview import AIInterviewService
-from orchestrator.utils.navigation import render_navigation_sidebar
+
+# Note: render_navigation_sidebar() is called in app.py, so we don't call it here
+# to avoid duplication
 
 # Load environment variables from .env file
 load_dotenv()
@@ -36,9 +33,6 @@ def initialize_chat_state():
 
 def main():
     """Main interview chat page."""
-    # Render navigation sidebar
-    render_navigation_sidebar()
-    
     initialize_chat_state()
     
     st.title("💬 Generate Parameter Documents")
@@ -346,5 +340,6 @@ def main():
                     })
 
 
-if __name__ == "__main__":
-    main()
+# When used with st.navigation(), Streamlit executes this file directly
+# so we call main() at module level (not inside if __name__ == "__main__")
+main()

@@ -7,21 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
-from orchestrator.utils.navigation import hide_streamlit_navigation
-
-# Hide Streamlit navigation immediately to prevent flash
-hide_streamlit_navigation()
-
 from orchestrator.services.project_discovery import ProjectDiscovery
 from orchestrator.services.config_manager import ConfigManager
-from orchestrator.utils.navigation import render_navigation_sidebar
 
+# Note: render_navigation_sidebar() is called in app.py, so we don't call it here
+# to avoid duplication
 
 def main():
     """Main project selection page."""
-    # Render navigation sidebar
-    render_navigation_sidebar()
-    
     st.title("📁 Select Project")
     
     # Show current project if one is selected
@@ -101,6 +94,7 @@ def main():
         del st.session_state['project_selected_message']
 
 
-if __name__ == "__main__":
-    main()
+# When used with st.navigation(), Streamlit executes this file directly
+# so we call main() at module level (not inside if __name__ == "__main__")
+main()
 

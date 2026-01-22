@@ -7,26 +7,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
-from orchestrator.utils.navigation import hide_streamlit_navigation
-
-# Hide Streamlit navigation immediately to prevent flash
-hide_streamlit_navigation()
-
 from datetime import datetime
 from orchestrator.services.config_manager import ConfigManager
 from orchestrator.services.cli_executor import CLIExecutor, CLIExecutionError
 from orchestrator.services.run_metadata import RunMetadata
 from orchestrator.utils.path_validation import validate_path, PathValidationError
 from orchestrator.models.project import Project
-from orchestrator.utils.navigation import render_navigation_sidebar
 import os
 
+# Note: render_navigation_sidebar() is called in app.py, so we don't call it here
+# to avoid duplication
 
 def main():
     """Main project creation page."""
-    # Render navigation sidebar
-    render_navigation_sidebar()
-    
     st.title("➕ Create New Spec Kit Project")
     
     config_manager = ConfigManager()
@@ -281,7 +274,7 @@ def main():
             st.error(f"❌ Project creation failed with exit code {exit_code}")
 
 
-if __name__ == "__main__":
-    import os
-    main()
+# When used with st.navigation(), Streamlit executes this file directly
+# so we call main() at module level (not inside if __name__ == "__main__")
+main()
 

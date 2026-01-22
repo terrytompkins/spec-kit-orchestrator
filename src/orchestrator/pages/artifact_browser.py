@@ -7,21 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
-from orchestrator.utils.navigation import hide_streamlit_navigation
-
-# Hide Streamlit navigation immediately to prevent flash
-hide_streamlit_navigation()
-
 from orchestrator.services.artifact_reader import ArtifactReader
 from orchestrator.services.run_metadata import RunMetadata
-from orchestrator.utils.navigation import render_navigation_sidebar
 
+# Note: render_navigation_sidebar() is called in app.py, so we don't call it here
+# to avoid duplication
 
 def main():
     """Main artifact browser page."""
-    # Render navigation sidebar
-    render_navigation_sidebar()
-    
     st.title("📄 Browse Artifacts")
     
     # Show current project header
@@ -153,6 +146,7 @@ def main():
                     st.error(f"Error loading metadata from {run_dir}: {str(e)}")
 
 
-if __name__ == "__main__":
-    main()
+# When used with st.navigation(), Streamlit executes this file directly
+# so we call main() at module level (not inside if __name__ == "__main__")
+main()
 

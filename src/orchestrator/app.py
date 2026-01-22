@@ -30,55 +30,103 @@ st.set_page_config(
     }
 )
 
-# Import and apply navigation CSS immediately to prevent flash
-from orchestrator.utils.navigation import hide_streamlit_navigation, render_navigation_sidebar
-
-# Hide Streamlit navigation immediately after page config
-hide_streamlit_navigation()
-
 # Initialize session state
 if 'selected_project' not in st.session_state:
     st.session_state.selected_project = None
 if 'project_path' not in st.session_state:
     st.session_state.project_path = None
 
-# Render navigation sidebar (consistent across all pages)
+# Import navigation component
+from orchestrator.utils.navigation import render_navigation_sidebar
+
+
+def home_page():
+    """Home page content."""
+    # Main title
+    st.title("🎯 Spec Kit Orchestrator")
+    st.markdown("A non-technical UI for managing Spec Kit workflows")
+
+    # Main content
+    if st.session_state.selected_project is None:
+        st.info("👈 Select a project from the sidebar or create a new one to get started.")
+        st.markdown("""
+        ### Getting Started
+        
+        1. **Select an existing project** from your workspace
+        2. **Create a new project** to initialize a new Spec Kit project
+        3. **Generate parameters** to create command parameter documents
+        4. **Run phases** to execute Spec Kit workflows
+        5. **Browse artifacts** to review generated content
+        
+        See the README.md for detailed setup and configuration instructions.
+        """)
+    else:
+        st.success(f"📂 Working with project: {st.session_state.selected_project}")
+        st.markdown(f"**Path**: `{st.session_state.project_path}`")
+        
+        # Quick actions
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🚀 Run Phases"):
+                st.switch_page("pages/phase_runner.py")
+        
+        with col2:
+            if st.button("📄 Browse Artifacts"):
+                st.switch_page("pages/artifact_browser.py")
+        
+        with col3:
+            if st.button("💬 Generate Parameters"):
+                st.switch_page("pages/interview_chat.py")
+
+
+# Define pages using st.Page API
+# This allows custom labels and icons without emojis in filenames
+# Use absolute paths to ensure files are found regardless of working directory
+pages_dir = Path(__file__).parent / "pages"
+
+pages = [
+    st.Page(
+        home_page,
+        title="Home",
+        icon="🏠",
+        default=True  # This will be the default/home page
+    ),
+    st.Page(
+        str((pages_dir / "project_selection.py").resolve()),
+        title="Select Project",
+        icon="📁"
+    ),
+    st.Page(
+        str((pages_dir / "project_creation.py").resolve()),
+        title="New Project",
+        icon="➕"
+    ),
+    st.Page(
+        str((pages_dir / "phase_runner.py").resolve()),
+        title="Phase Runner",
+        icon="🚀"
+    ),
+    st.Page(
+        str((pages_dir / "interview_chat.py").resolve()),
+        title="Interview Chat",
+        icon="💬"
+    ),
+    st.Page(
+        str((pages_dir / "artifact_browser.py").resolve()),
+        title="Artifact Browser",
+        icon="📄"
+    ),
+]
+
+# Render project status in sidebar first (will appear above navigation)
 render_navigation_sidebar()
 
-# Main title
-st.title("🎯 Spec Kit Orchestrator")
-st.markdown("A non-technical UI for managing Spec Kit workflows")
+# Create navigation with native sidebar navigation
+# This will show the pages with custom titles/icons we defined above
+# The navigation will appear below the project status in the sidebar
+nav = st.navigation(pages, position="sidebar")
 
-# Main content
-if st.session_state.selected_project is None:
-    st.info("👈 Select a project from the sidebar or create a new one to get started.")
-    st.markdown("""
-    ### Getting Started
-    
-    1. **Select an existing project** from your workspace
-    2. **Create a new project** to initialize a new Spec Kit project
-    3. **Generate parameters** to create command parameter documents
-    4. **Run phases** to execute Spec Kit workflows
-    5. **Browse artifacts** to review generated content
-    
-    See the README.md for detailed setup and configuration instructions.
-    """)
-else:
-    st.success(f"📂 Working with project: {st.session_state.selected_project}")
-    st.markdown(f"**Path**: `{st.session_state.project_path}`")
-    
-    # Quick actions
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🚀 Run Phases"):
-            st.switch_page("pages/phase_runner.py")
-    
-    with col2:
-        if st.button("📄 Browse Artifacts"):
-            st.switch_page("pages/artifact_browser.py")
-    
-    with col3:
-        if st.button("💬 Generate Parameters"):
-            st.switch_page("pages/interview_chat.py")
+# Run the selected page
+nav.run()
 
