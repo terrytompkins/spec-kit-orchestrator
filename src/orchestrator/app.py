@@ -64,20 +64,20 @@ def home_page():
         st.success(f"📂 Working with project: {st.session_state.selected_project}")
         st.markdown(f"**Path**: `{st.session_state.project_path}`")
         
-        # Quick actions
+        # Quick actions (Interview Chat first - artifacts needed before running phases)
         col1, col2, col3 = st.columns(3)
         
         with col1:
+            if st.button("💬 Generate Parameters"):
+                st.switch_page("pages/interview_chat.py")
+        
+        with col2:
             if st.button("🚀 Run Phases"):
                 st.switch_page("pages/phase_runner.py")
         
-        with col2:
+        with col3:
             if st.button("📄 Browse Artifacts"):
                 st.switch_page("pages/artifact_browser.py")
-        
-        with col3:
-            if st.button("💬 Generate Parameters"):
-                st.switch_page("pages/interview_chat.py")
 
 
 # Define pages using st.Page API
@@ -103,14 +103,14 @@ pages = [
         icon="➕"
     ),
     st.Page(
-        str((pages_dir / "phase_runner.py").resolve()),
-        title="Phase Runner",
-        icon="🚀"
-    ),
-    st.Page(
         str((pages_dir / "interview_chat.py").resolve()),
         title="Interview Chat",
         icon="💬"
+    ),
+    st.Page(
+        str((pages_dir / "phase_runner.py").resolve()),
+        title="Phase Runner",
+        icon="🚀"
     ),
     st.Page(
         str((pages_dir / "artifact_browser.py").resolve()),

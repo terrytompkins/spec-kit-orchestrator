@@ -267,8 +267,8 @@ def main():
             
             st.markdown("### Next Steps")
             st.markdown("""
-            1. Navigate to **Phase Runner** to run Spec Kit phases
-            2. Or go to **Interview Chat** to generate parameter documents
+            1. Navigate to **Interview Chat** to generate parameter documents (required before running phases)
+            2. Then go to **Phase Runner** to execute Spec Kit phases
             """)
         elif exit_code is not None:
             st.error(f"❌ Project creation failed with exit code {exit_code}")
