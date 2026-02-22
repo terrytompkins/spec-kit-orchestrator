@@ -7,10 +7,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import os
+from datetime import datetime as dt_parse
 import streamlit as st
 from dotenv import load_dotenv
 from orchestrator.services.parameter_generator import ParameterGenerator
 from orchestrator.services.ai_interview import AIInterviewService
+from orchestrator.services import interview_state as interview_state_service
 
 # Note: render_navigation_sidebar() is called in app.py, so we don't call it here
 # to avoid duplication
@@ -29,6 +31,9 @@ def initialize_chat_state():
         st.session_state.generated_parameters = None
     if 'ai_service' not in st.session_state:
         st.session_state.ai_service = None
+    # Which project we've already chosen Resume/Start new for (so we don't show banner again)
+    if 'interview_session_resolved_project' not in st.session_state:
+        st.session_state.interview_session_resolved_project = None
 
 
 def main():
@@ -203,6 +208,48 @@ def main():
                                 st.code(traceback.format_exc())
         return
     
+    # Offer to resume if this project has a saved session and we haven't chosen yet for this project
+    resolved_for = st.session_state.get("interview_session_resolved_project")
+    if resolved_for != str(project_path) and interview_state_service.has_resumable_session(project_path):
+        saved = interview_state_service.load(project_path)
+        saved_at = saved.get("saved_at") if saved else None
+        if saved_at:
+            try:
+                dt = dt_parse.fromisoformat(saved_at.replace("Z", "+00:00"))
+                saved_at_label = dt.strftime("%Y-%m-%d %H:%M UTC")
+            except Exception:
+                saved_at_label = saved_at
+        else:
+            saved_at_label = "previously"
+        st.warning(f"**Saved session found** (saved {saved_at_label}). Resume or start a new interview?")
+        col_resume, col_new = st.columns(2)
+        with col_resume:
+            if st.button("Resume", key="interview_resume"):
+                state = interview_state_service.load(project_path)
+                if state:
+                    st.session_state.chat_messages = state.get("chat_messages") or []
+                    st.session_state.interview_complete = state.get("interview_complete", False)
+                    st.session_state.generated_parameters = state.get("generated_parameters")
+                    st.session_state.interview_session_resolved_project = str(project_path)
+                    st.rerun()
+        with col_new:
+            if st.button("Start new", key="interview_start_new"):
+                st.session_state.chat_messages = []
+                st.session_state.interview_complete = False
+                st.session_state.generated_parameters = None
+                st.session_state.interview_session_resolved_project = str(project_path)
+                interview_state_service.save(
+                    project_path,
+                    [],
+                    False,
+                    None,
+                )
+                st.rerun()
+        return
+    
+    # Mark that we've resolved resume/start new for this project (so we don't show banner again)
+    st.session_state.interview_session_resolved_project = str(project_path)
+    
     # AI Chat Interface
     st.info("""
     **AI-Powered Interview Chat**
@@ -211,6 +258,8 @@ def main():
     This will help generate comprehensive, high-quality Spec Kit command parameter documents for all phases.
     
     **Note**: The interview will ask 8-12 questions to gather comprehensive information. Please provide detailed answers for best results.
+    
+    Your session is **auto-saved** after each exchange so you can resume later or on another computer. See **docs/interview-session-persistence.md** for details.
     """)
     
     # Initialize conversation if empty
@@ -220,6 +269,12 @@ def main():
             "role": "assistant",
             "content": initial_question
         })
+        interview_state_service.save(
+            project_path,
+            st.session_state.chat_messages,
+            st.session_state.interview_complete,
+            st.session_state.generated_parameters,
+        )
     
     # Display chat messages
     for message in st.session_state.chat_messages:
@@ -283,6 +338,7 @@ def main():
                 st.session_state.chat_messages = []
                 st.session_state.interview_complete = False
                 st.session_state.generated_parameters = None
+                interview_state_service.save(project_path, [], False, None)
                 st.rerun()
         
         return
@@ -320,6 +376,12 @@ def main():
                         
                         st.session_state.generated_parameters = result["parameters"]
                         st.session_state.interview_complete = True
+                        interview_state_service.save(
+                            project_path,
+                            st.session_state.chat_messages,
+                            True,
+                            st.session_state.generated_parameters,
+                        )
                         st.success("✅ I've gathered enough information. Ready to generate parameters!")
                         st.rerun()
                     else:
@@ -330,6 +392,12 @@ def main():
                             "role": "assistant",
                             "content": question
                         })
+                        interview_state_service.save(
+                            project_path,
+                            st.session_state.chat_messages,
+                            st.session_state.interview_complete,
+                            st.session_state.generated_parameters,
+                        )
                 
                 except Exception as e:
                     error_msg = f"❌ Error during interview: {str(e)}"
@@ -338,6 +406,12 @@ def main():
                         "role": "assistant",
                         "content": error_msg
                     })
+                    interview_state_service.save(
+                        project_path,
+                        st.session_state.chat_messages,
+                        st.session_state.interview_complete,
+                        st.session_state.generated_parameters,
+                    )
 
 
 # When used with st.navigation(), Streamlit executes this file directly

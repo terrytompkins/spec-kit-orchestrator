@@ -119,6 +119,7 @@ The application will open in your default web browser at `http://localhost:8501`
    - Navigate to "Interview Chat" page
    - Answer questions about your project/feature
    - System generates `docs/spec-kit-parameters.md` and `docs/spec-kit-parameters.yml`
+   - Interview sessions are **auto-saved** so you can resume later or on another computer (see [Interview session persistence](docs/interview-session-persistence.md))
 
 3. **Run Spec Kit Phases**:
    - Navigate to "Phase Runner" page
@@ -155,6 +156,7 @@ spec-kit-orchestrator/
 │       │   ├── artifact_reader.py
 │       │   ├── parameter_generator.py
 │       │   ├── run_metadata.py
+│       │   ├── interview_state.py   # Interview session save/load for resume
 │       │   └── config_manager.py
 │       ├── models/                   # Data entities
 │       │   ├── project.py
