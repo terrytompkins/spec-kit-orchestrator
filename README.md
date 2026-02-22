@@ -18,7 +18,7 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
 ## Requirements
 
 - **Python**: 3.11 or higher
-- **Spec Kit CLI**: Must be installed and available in PATH (see [Spec Kit documentation](https://github.com/spec-kit/spec-kit) for installation)
+- **Spec Kit CLI**: Must be installed and available in PATH (see [Spec Kit documentation](https://github.com/github/spec-kit) for installation)
 - **Operating System**: macOS, Linux, or Windows
 
 ## Installation
@@ -42,15 +42,15 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
 
 4. **Verify Spec Kit CLI is installed**:
    ```bash
-   specify --version
+   specify verify
    ```
-   If not installed, follow the [Spec Kit installation instructions](https://github.com/spec-kit/spec-kit).
+   If not installed, follow the [Spec Kit installation instructions](https://github.com/github/spec-kit).
 
 ## Configuration
 
 ### Admin Configuration
 
-Create a configuration file at `.specify/orchestrator/config.yml`:
+Create a configuration file at `.specify/orchestrator/config.yml` **in the orchestrator application directory** (not in the projects you create):
 
 ```yaml
 workspace:
@@ -67,11 +67,30 @@ secrets:
   mask_in_logs: true
 ```
 
-**Important**: The `base_directory` must be an absolute path. All user-provided project paths will be validated against this base directory to prevent directory traversal attacks.
+**Important Notes**:
+- This config file is for the **orchestrator tool itself**, located at: `<orchestrator-repo-root>/.specify/orchestrator/config.yml`
+- The `base_directory` must be an absolute path. All user-provided project paths will be validated against this base directory to prevent directory traversal attacks.
+- Projects created through the orchestrator will have their own `.specify/` directories (created by `specify init`), but those are separate from this orchestrator configuration.
 
 ### Environment Variables
 
-Secrets (GitHub tokens, API keys) should be stored in environment variables, not in configuration files:
+Secrets (GitHub tokens, API keys) should be stored in environment variables, not in configuration files. The application supports loading environment variables from a `.env` file in the project root directory.
+
+**Option 1: Using a `.env` file (recommended)**
+
+Create a `.env` file in the project root directory:
+
+```bash
+# .env
+GITHUB_TOKEN=your-token-here
+OPENAI_API_KEY=your-key-here  # If using OpenAI-based agents
+```
+
+The `.env` file is automatically loaded when the application starts and is already included in `.gitignore` to prevent committing secrets.
+
+**Option 2: Using system environment variables**
+
+Alternatively, you can set environment variables in your shell:
 
 ```bash
 export GITHUB_TOKEN="your-token-here"
@@ -100,6 +119,7 @@ The application will open in your default web browser at `http://localhost:8501`
    - Navigate to "Interview Chat" page
    - Answer questions about your project/feature
    - System generates `docs/spec-kit-parameters.md` and `docs/spec-kit-parameters.yml`
+   - Interview sessions are **auto-saved** so you can resume later or on another computer (see [Interview session persistence](docs/interview-session-persistence.md))
 
 3. **Run Spec Kit Phases**:
    - Navigate to "Phase Runner" page
@@ -136,6 +156,7 @@ spec-kit-orchestrator/
 │       │   ├── artifact_reader.py
 │       │   ├── parameter_generator.py
 │       │   ├── run_metadata.py
+│       │   ├── interview_state.py   # Interview session save/load for resume
 │       │   └── config_manager.py
 │       ├── models/                   # Data entities
 │       │   ├── project.py
@@ -219,7 +240,7 @@ This project adheres to the following principles (see `.specify/memory/constitut
 
 If you see an error that the Spec Kit CLI is not installed:
 1. Verify `specify` command is in your PATH
-2. Install Spec Kit following the [official documentation](https://github.com/spec-kit/spec-kit)
+2. Install Spec Kit following the [official documentation](https://github.com/github/spec-kit)
 3. Restart the Streamlit application
 
 ### Permission Errors
@@ -250,7 +271,7 @@ This is an internal tool (at least for v1). For contributions:
 
 ## Related Projects
 
-- [Spec Kit](https://github.com/spec-kit/spec-kit): The underlying CLI tool that this orchestrator manages
+- [Spec Kit](https://github.com/github/spec-kit): The underlying CLI tool that this orchestrator manages
 
 ---
 

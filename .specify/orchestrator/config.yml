@@ -1,0 +1,52 @@
+# Spec Kit Orchestrator Configuration
+# This file configures the orchestrator tool itself, not individual projects.
+# Location: <orchestrator-repo-root>/.specify/orchestrator/config.yml
+
+# Workspace Configuration
+# Defines where the orchestrator will look for and create Spec Kit projects
+workspace:
+  # Base directory for project discovery and creation
+  # All projects must be created within this directory (security constraint)
+  # Use an absolute path (e.g., /Users/username/spec-kit-projects)
+  # Default if not set: ~/spec-kit-workspace
+  base_directory: "/home/ttompkins/src/GenAI/spec-kit-workspace"
+
+# AI Agent Configuration
+# Defines which AI code agents are allowed for Spec Kit commands
+# These are code agent names (not AI models) that correspond to the --ai flag in 'specify init'
+ai_agents:
+  # List of allowed AI code agent values for the --ai flag in 'specify init'
+  # These values will appear in the dropdown in the project creation UI
+  # You can restrict this list to only the agents you want to allow, or include all available
+  allowed_values:
+    - "copilot"        # GitHub Copilot
+    - "claude"        # Claude Code
+    - "gemini"        # Gemini CLI
+    - "cursor-agent"  # Cursor
+    - "qwen"          # Qwen Code
+    - "opencode"      # opencode
+    - "codex"         # Codex CLI
+    - "windsurf"      # Windsurf
+    - "kilocode"      # Kilo Code
+    - "auggie"        # Auggie CLI
+    - "codebuddy"     # CodeBuddy
+    - "qoder"         # Qoder CLI
+    - "roo"           # Roo Code
+    - "q"             # Amazon Q Developer CLI
+    - "amp"           # Amp
+    - "shai"          # SHAI
+    - "bob"           # IBM Bob
+
+# Secrets Management Configuration
+# Controls how secrets (tokens, API keys) are handled
+secrets:
+  # Storage mechanism for secrets
+  # Options: "environment" (use environment variables) or "secure_store" (future)
+  # For v1, only "environment" is supported
+  storage: "environment"
+  
+  # Whether to mask secrets in logs and UI displays
+  # When true, secrets will be replaced with [REDACTED] in output
+  # Recommended: true (for security)
+  mask_in_logs: true
+
