@@ -22,6 +22,32 @@ def main():
     """Main project creation page."""
     st.title("➕ Create New Spec Kit Project")
     
+    # If we just completed a successful creation, show success state and hide the form
+    if st.session_state.get("project_creation_success"):
+        st.success("✅ Project created successfully!")
+        if st.session_state.get("project_creation_path"):
+            st.info(f"**Project Path**: `{st.session_state.project_creation_path}`")
+        if st.session_state.get("project_creation_stdout") or st.session_state.get("project_creation_stderr"):
+            with st.expander("Console output", expanded=False):
+                if st.session_state.get("project_creation_stdout"):
+                    st.markdown("**Command Output:**")
+                    st.markdown(f"```\n{chr(10).join(st.session_state.project_creation_stdout)}\n```")
+                if st.session_state.get("project_creation_stderr"):
+                    st.warning("Errors/warnings:")
+                    st.markdown(f"```\n{chr(10).join(st.session_state.project_creation_stderr)}\n```")
+        st.markdown("### Next Steps")
+        st.markdown("""
+        1. Navigate to **Interview Chat** to generate parameter documents (required before running phases)
+        2. Then go to **Phase Runner** to execute Spec Kit phases
+        """)
+        if st.button("Create another project", type="primary"):
+            st.session_state.project_creation_success = False
+            st.session_state.project_creation_path = None
+            st.session_state.project_creation_stdout = None
+            st.session_state.project_creation_stderr = None
+            st.rerun()
+        return
+    
     config_manager = ConfigManager()
     base_directory = config_manager.get_base_directory()
     allowed_ai_agents = config_manager.get_allowed_ai_agents()
@@ -258,18 +284,15 @@ def main():
         
         # Display results after status context (in main thread)
         if exit_code == 0:
-            st.success(f"✅ Project '{project_name}' created successfully!")
-            st.info(f"**Project Path**: `{project_path}`")
-            
             # Set project in session state
             st.session_state.selected_project = project_name
             st.session_state.project_path = str(project_path)
-            
-            st.markdown("### Next Steps")
-            st.markdown("""
-            1. Navigate to **Interview Chat** to generate parameter documents (required before running phases)
-            2. Then go to **Phase Runner** to execute Spec Kit phases
-            """)
+            # Flag and store output so next rerun shows success state (form hidden, output in expander)
+            st.session_state.project_creation_success = True
+            st.session_state.project_creation_path = str(project_path)
+            st.session_state.project_creation_stdout = stdout if stdout else None
+            st.session_state.project_creation_stderr = stderr if stderr else None
+            st.rerun()  # Rerun to show success state (Create button no longer visible)
         elif exit_code is not None:
             st.error(f"❌ Project creation failed with exit code {exit_code}")
 
