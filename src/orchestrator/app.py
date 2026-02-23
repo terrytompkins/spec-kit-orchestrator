@@ -108,6 +108,11 @@ pages = [
         icon="💬"
     ),
     st.Page(
+        str((pages_dir / "command_parameters.py").resolve()),
+        title="Command Parameters",
+        icon="📋"
+    ),
+    st.Page(
         str((pages_dir / "phase_runner.py").resolve()),
         title="Phase Runner",
         icon="🚀"
