@@ -31,6 +31,9 @@ def initialize_chat_state():
         st.session_state.generated_parameters = None
     if 'ai_service' not in st.session_state:
         st.session_state.ai_service = None
+    # Which project the current in-memory chat state belongs to
+    if 'interview_chat_project' not in st.session_state:
+        st.session_state.interview_chat_project = None
     # Which project we've already chosen Resume/Start new for (so we don't show banner again)
     if 'interview_session_resolved_project' not in st.session_state:
         st.session_state.interview_session_resolved_project = None
@@ -61,6 +64,16 @@ def main():
     if not project_path.exists():
         st.error(f"❌ Project path does not exist: {project_path}")
         return
+    
+    # When user switches to a different project, clear in-memory chat state so we
+    # don't show the previous project's conversation
+    current_project_key = str(project_path)
+    if st.session_state.interview_chat_project != current_project_key:
+        st.session_state.chat_messages = []
+        st.session_state.interview_complete = False
+        st.session_state.generated_parameters = None
+        st.session_state.interview_chat_project = current_project_key
+        st.session_state.interview_session_resolved_project = None
     
     generator = ParameterGenerator(project_path)
     
