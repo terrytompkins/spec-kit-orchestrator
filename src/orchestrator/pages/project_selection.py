@@ -74,17 +74,17 @@ def main():
                     st.session_state['project_selected_message'] = f"✅ Successfully selected project: **{project.name}**"
                     st.rerun()
     
-    # Quick select dropdown
+    # Quick select dropdown (same effect as "Select" in the list above)
     st.subheader("Quick Select")
+    st.caption("Same as using **Select** in the list above — choose a project and click to set it as current.")
     project_names = [p.name for p in projects]
     selected_name = st.selectbox("Select a project", options=project_names)
     
-    if st.button("Load Project", type="primary"):
+    if st.button("Select", key="quick_select_btn", type="primary"):
         selected_project = next(p for p in projects if p.name == selected_name)
         st.session_state.selected_project = selected_project.name
         st.session_state.project_path = str(selected_project.path)
-        # Store success message in session state to persist after rerun
-        st.session_state['project_selected_message'] = f"✅ Successfully loaded project: **{selected_project.name}**"
+        st.session_state['project_selected_message'] = f"✅ Successfully selected project: **{selected_project.name}**"
         st.rerun()
     
     # Show success message if project was just selected
