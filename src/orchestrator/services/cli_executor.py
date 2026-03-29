@@ -3,7 +3,7 @@
 import subprocess
 import shlex
 from pathlib import Path
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Callable, Tuple, Iterable
 import threading
 import queue
 
@@ -30,6 +30,7 @@ class CLIExecutor:
         command: List[str],
         working_directory: Optional[Path] = None,
         env: Optional[dict] = None,
+        env_remove: Optional[Iterable[str]] = None,
         output_callback: Optional[Callable[[str], None]] = None,
         error_callback: Optional[Callable[[str], None]] = None
     ) -> Tuple[int, List[str], List[str]]:
@@ -40,6 +41,7 @@ class CLIExecutor:
             command: Command and arguments as list (e.g., ['specify', 'init', '--ai', 'claude'])
             working_directory: Working directory for command (overrides default)
             env: Environment variables (merged with current env)
+            env_remove: Names to remove from the merged environment (after applying env)
             output_callback: Optional callback for each stdout line
             error_callback: Optional callback for each stderr line
         
@@ -50,10 +52,14 @@ class CLIExecutor:
         
         # Prepare environment
         process_env = None
-        if env:
+        if env or env_remove:
             import os
             process_env = os.environ.copy()
-            process_env.update(env)
+            if env:
+                process_env.update(env)
+            if env_remove:
+                for key in env_remove:
+                    process_env.pop(key, None)
         
         # Start process
         try:

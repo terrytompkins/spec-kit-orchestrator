@@ -69,10 +69,16 @@ def main():
             help="Select the AI agent to use for Spec Kit commands"
         )
         
+        use_offline = st.checkbox(
+            "Use bundled Spec Kit assets only (--offline)",
+            value=True,
+            help="Skips downloading release assets from GitHub (no API call). Recommended: avoids rate limits, works offline, and sidesteps 401 errors from an invalid GH_TOKEN/GITHUB_TOKEN in your environment.",
+        )
+
         github_token = st.text_input(
             "GitHub Token",
             type="password",
-            help="GitHub token for Spec Kit initialization. Required to fetch release information from GitHub API. You can also set GH_TOKEN or GITHUB_TOKEN environment variable.",
+            help="Only needed when offline mode is off and Spec Kit must fetch releases from GitHub. You can also set GH_TOKEN or GITHUB_TOKEN (a bad or expired token there causes 401 from the API).",
             placeholder="Enter token or leave empty to use GH_TOKEN/GITHUB_TOKEN env var"
         )
         
@@ -114,14 +120,19 @@ def main():
         if not config_manager.is_ai_agent_allowed(ai_agent):
             errors.append(f"AI agent '{ai_agent}' is not in allowed list")
         
-        # Check if GitHub token is available (from form or environment)
-        if not github_token:
-            github_token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
-            if github_token:
-                st.info("ℹ️ Using GitHub token from environment variable (GH_TOKEN or GITHUB_TOKEN)")
-            else:
-                st.warning("⚠️ **Warning**: No GitHub token provided. Spec Kit initialization may fail when fetching release information from GitHub API. Consider providing a token or setting GH_TOKEN/GITHUB_TOKEN environment variable.")
-                # Don't block execution, but warn the user
+        # Check if GitHub token is available (from form or environment) when not using offline init
+        if not use_offline:
+            if not github_token:
+                github_token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+                if github_token:
+                    st.info("ℹ️ Using GitHub token from environment variable (GH_TOKEN or GITHUB_TOKEN)")
+                else:
+                    st.warning(
+                        "⚠️ **Warning**: Offline mode is off and no GitHub token was provided. "
+                        "`specify init` may fail when fetching releases. Add a token, set GH_TOKEN/GITHUB_TOKEN, or enable **Use bundled Spec Kit assets only**."
+                    )
+        else:
+            github_token = None  # do not pass --github-token; bundled assets do not need the API
         
         # Display errors if any
         if errors:
@@ -158,7 +169,9 @@ def main():
         # Since we're running inside the project directory, we'll use --here
         command = ['specify', 'init', '--here']
         command.extend(['--ai', ai_agent])
-        
+        if use_offline:
+            command.append('--offline')
+
         if github_token:
             command.extend(['--github-token', github_token])
         
@@ -200,11 +213,16 @@ def main():
         # Show a note that this may take a while
         st.info("⏳ Initializing project... This may take a minute. Output will be displayed when complete.")
         
+        # specify reads GH_TOKEN/GITHUB_TOKEN from the environment; a stale token causes 401 from
+        # GitHub even when using --offline, so strip those vars for this process only.
+        token_env_remove = ["GH_TOKEN", "GITHUB_TOKEN"] if use_offline else None
+
         with st.status("Initializing project...", expanded=True) as status:
             try:
                 exit_code, stdout, stderr = executor.execute(
                     command,
-                    working_directory=project_path,  # Run inside the project directory  # Run inside the project directory
+                    working_directory=project_path,
+                    env_remove=token_env_remove,
                     output_callback=output_callback,
                     error_callback=error_callback
                 )
