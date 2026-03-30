@@ -69,16 +69,16 @@ def main():
             help="Select the AI agent to use for Spec Kit commands"
         )
         
-        use_offline = st.checkbox(
-            "Use bundled Spec Kit assets only (--offline)",
+        omit_github_credentials = st.checkbox(
+            "Ignore GitHub credentials for this run",
             value=True,
-            help="Skips downloading release assets from GitHub (no API call). Recommended: avoids rate limits, works offline, and sidesteps 401 errors from an invalid GH_TOKEN/GITHUB_TOKEN in your environment.",
+            help="`specify init` still downloads the template from GitHub. When enabled, GH_TOKEN/GITHUB_TOKEN are removed for this subprocess only and the **GitHub Token** field is ignored—useful when an invalid token in your environment would cause 401. Unauthenticated GitHub API access has lower rate limits (~60/hour); disable this and supply a token if you hit limits.",
         )
 
         github_token = st.text_input(
             "GitHub Token",
             type="password",
-            help="Only needed when offline mode is off and Spec Kit must fetch releases from GitHub. You can also set GH_TOKEN or GITHUB_TOKEN (a bad or expired token there causes 401 from the API).",
+            help="Used when **Ignore GitHub credentials** is off. You can also rely on GH_TOKEN or GITHUB_TOKEN in the environment (a bad or expired token there causes 401 from the API).",
             placeholder="Enter token or leave empty to use GH_TOKEN/GITHUB_TOKEN env var"
         )
         
@@ -120,19 +120,19 @@ def main():
         if not config_manager.is_ai_agent_allowed(ai_agent):
             errors.append(f"AI agent '{ai_agent}' is not in allowed list")
         
-        # Check if GitHub token is available (from form or environment) when not using offline init
-        if not use_offline:
+        # When omitting credentials, do not pass --github-token; strip env vars below so bad tokens cannot 401 the API
+        if not omit_github_credentials:
             if not github_token:
                 github_token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
                 if github_token:
                     st.info("ℹ️ Using GitHub token from environment variable (GH_TOKEN or GITHUB_TOKEN)")
                 else:
                     st.warning(
-                        "⚠️ **Warning**: Offline mode is off and no GitHub token was provided. "
-                        "`specify init` may fail when fetching releases. Add a token, set GH_TOKEN/GITHUB_TOKEN, or enable **Use bundled Spec Kit assets only**."
+                        "⚠️ **Warning**: GitHub credentials are not ignored, but no token was provided. "
+                        "`specify init` may hit unauthenticated rate limits. Add a token, set GH_TOKEN/GITHUB_TOKEN, or enable **Ignore GitHub credentials for this run**."
                     )
         else:
-            github_token = None  # do not pass --github-token; bundled assets do not need the API
+            github_token = None
         
         # Display errors if any
         if errors:
@@ -169,8 +169,6 @@ def main():
         # Since we're running inside the project directory, we'll use --here
         command = ['specify', 'init', '--here']
         command.extend(['--ai', ai_agent])
-        if use_offline:
-            command.append('--offline')
 
         if github_token:
             command.extend(['--github-token', github_token])
@@ -213,9 +211,8 @@ def main():
         # Show a note that this may take a while
         st.info("⏳ Initializing project... This may take a minute. Output will be displayed when complete.")
         
-        # specify reads GH_TOKEN/GITHUB_TOKEN from the environment; a stale token causes 401 from
-        # GitHub even when using --offline, so strip those vars for this process only.
-        token_env_remove = ["GH_TOKEN", "GITHUB_TOKEN"] if use_offline else None
+        # specify reads GH_TOKEN/GITHUB_TOKEN from the environment; strip when user asked to omit credentials
+        token_env_remove = ["GH_TOKEN", "GITHUB_TOKEN"] if omit_github_credentials else None
 
         with st.status("Initializing project...", expanded=True) as status:
             try:

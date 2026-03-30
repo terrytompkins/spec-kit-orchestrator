@@ -51,7 +51,9 @@ The Spec Kit phases need:
 - **Tasks**: Structured task breakdown with dependencies and priorities
 - **Analyze**: Specific metrics, success criteria, evaluation methods
 
-Ask ONE question at a time. Be conversational but thorough. Only suggest generating parameters when you have comprehensive, detailed information."""
+Ask ONE question at a time. Be conversational but thorough. Only suggest generating parameters when you have comprehensive, detailed information.
+
+When the interview is complete, a separate step will turn this transcript into Spec Kit phase parameters: **specific names (controls, APIs, platforms), flows, and decisions stated here should survive into that output**—so prefer precise, concrete answers from the user rather than vague themes."""
     
     def get_initial_question(self) -> str:
         """Get the first question to start the interview."""
@@ -95,7 +97,9 @@ Ask ONE question at a time. Be conversational but thorough. Only suggest generat
             
             # Check if the assistant is ready to generate parameters
             # Look for indicators that the interview is complete
-            if self._should_generate_parameters(assistant_message, conversation_history):
+            if self._should_generate_parameters(
+                assistant_message, conversation_history, user_response
+            ):
                 # Generate parameters
                 parameters = self._generate_parameters(messages + [{"role": "assistant", "content": assistant_message}])
                 return {
@@ -114,23 +118,32 @@ Ask ONE question at a time. Be conversational but thorough. Only suggest generat
         except Exception as e:
             raise RuntimeError(f"Error calling AI service: {str(e)}")
     
-    def _should_generate_parameters(self, assistant_message: str, history: List[Dict[str, str]]) -> bool:
+    def _should_generate_parameters(
+        self,
+        assistant_message: str,
+        history: List[Dict[str, str]],
+        user_response: str = "",
+    ) -> bool:
         """
         Determine if we have enough information to generate parameters.
         
         Args:
             assistant_message: Latest assistant message
-            history: Conversation history
+            history: Conversation history (messages before the current user turn)
+            user_response: The user's latest message (not always present in history yet)
         
         Returns:
             True if ready to generate parameters
         """
-        # Count meaningful user responses (exclude very short ones)
+        # Meaningful user turns: history may not yet include the message being processed
         user_messages = [msg for msg in history if msg.get("role") == "user" and len(msg.get("content", "")) > 20]
-        
+        current_user = (user_response or "").strip()
+        meaningful_user_count = len(user_messages) + (1 if len(current_user) > 20 else 0)
+
         lower_message = assistant_message.lower()
-        
-        # Only generate if assistant explicitly says so AND we have substantial conversation
+        lower_user = current_user.lower()
+
+        # Phrases models often use instead of the exact substring "generate parameters"
         explicit_indicators = [
             "generate parameters",
             "create the parameter",
@@ -139,31 +152,63 @@ Ask ONE question at a time. Be conversational but thorough. Only suggest generat
             "let me generate",
             "finalize these parameters",
             "ready to generate",
-            "generate the command parameters"
+            "generate the command parameters",
+            "generate detailed",
+            "help generate",
+            "i can help generate",
+            "help you generate",
+            "spec kit command parameters",
+            "detailed spec kit",
+            "comprehensive spec kit",
+            "these detailed parameters",
+            "spec kit phases",
+            "into actionable elements",
+            "### constitution",
+            "### specify",
         ]
-        
-        # Require at least 6-8 meaningful exchanges before considering completion
-        has_enough_exchanges = len(user_messages) >= 6
-        
-        # Check for explicit generation intent
+
+        # Require at least six substantive user turns before extracting
+        has_enough_exchanges = meaningful_user_count >= 6
+
         has_explicit_intent = any(phrase in lower_message for phrase in explicit_indicators)
-        
-        # Also check for user explicitly asking to generate
-        if history:
-            last_user_msg = history[-1].get("content", "").lower() if history[-1].get("role") == "user" else ""
-            user_wants_generate = any(phrase in last_user_msg for phrase in [
-                "generate",
-                "create parameters",
-                "let's go",
-                "yes - let's",
-                "proceed",
-                "go ahead"
-            ])
-        else:
-            user_wants_generate = False
-        
-        # Generate if: (explicit intent AND enough exchanges) OR (user explicitly requests AND enough exchanges)
-        return (has_explicit_intent and has_enough_exchanges) or (user_wants_generate and has_enough_exchanges)
+
+        # User intent: check the current message (previously only history[-1], which was often the assistant)
+        user_finalize_phrases = [
+            "generate the parameters",
+            "generate parameters",
+            "create parameters",
+            "finalize",
+            "extract parameters",
+            "parameter documents",
+            "spec-kit parameters",
+            "spec kit parameters",
+            "let's go",
+            "lets go",
+            "yes - let's",
+            "proceed",
+            "go ahead",
+            "that's enough",
+            "that is enough",
+            "i'm satisfied",
+            "im satisfied",
+            "looks good",
+            "ready to finalize",
+        ]
+        user_wants_generate = any(phrase in lower_user for phrase in user_finalize_phrases)
+
+        return (has_explicit_intent and has_enough_exchanges) or (
+            user_wants_generate and has_enough_exchanges
+        )
+
+    def extract_parameters_from_transcript(self, chat_messages: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
+        """
+        Run structured parameter extraction over the full chat transcript.
+
+        Use when the model produced parameters in prose but automatic completion
+        detection did not run (so interview_state never got generated_parameters).
+        """
+        messages = [{"role": "system", "content": self.system_prompt}] + list(chat_messages)
+        return self._generate_parameters(messages)
     
     def _generate_parameters(self, full_conversation: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
         """
@@ -175,66 +220,50 @@ Ask ONE question at a time. Be conversational but thorough. Only suggest generat
         Returns:
             Dictionary mapping phase names to parameter dictionaries
         """
-        # Create a prompt to extract parameters
-        extraction_prompt = """Based on our comprehensive conversation, generate detailed, structured Spec Kit command parameters for all phases.
+        # Extraction: prioritize fidelity to the transcript over brevity or generic templates
+        extraction_prompt = """You are producing inputs for Spec Kit slash commands (`/speckit.constitution`, `/speckit.specify`, etc.). The transcript above is the ONLY authoritative source.
 
-Generate RICH, SPECIFIC parameters that capture the full depth of our discussion. Each phase should be comprehensive and actionable.
+**Critical rules (read carefully):**
+1. **Transcript fidelity**: Carry over concrete details from the conversation—do not replace them with generic product-management boilerplate. If the user named buttons, panels, flows, platforms, libraries, milestones, data stores, or policies, those exact choices (or faithful paraphrases) must appear in the right phase sections.
+2. **No thinning**: Do not summarize away lists the user gave (e.g. feature checklists, UI controls, acceptance nuances). Prefer longer, dense text over short high-level blurbs. It is better to be verbose than to lose agreed decisions.
+3. **Attribution of decisions**: When the user chose among options (e.g. local-first vs cloud, framework, interaction model), state the decision and the rationale as discussed—not a new rationale.
+4. **Place detail in the right phase**: UX and product rules → CONSTITUTION where appropriate; feature behavior, stories, criteria, edge cases → SPECIFY; still-open items only → CLARIFY; stack, architecture, milestones, integrations → PLAN; implementable work units → TASKS; metrics, feedback, success definition → ANALYZE.
+5. **If something was not discussed**, you may mark it briefly as NEEDS CLARIFICATION in CLARIFY rather than inventing detail.
 
-**CONSTITUTION Phase**: Create a detailed constitution that includes:
-- Clear project purpose and problem statement
-- Target users and their needs
-- Core principles and values (UX, technical, business)
-- Non-goals (what this is NOT)
-- Constraints (technical, resource, scope)
-- Governance rules and standards
-- UX principles and guidelines
-Format as a readable document that both humans and AI can understand.
+**Per-phase content expectations:**
 
-**SPECIFY Phase**: Provide comprehensive specifications including:
-- Detailed feature descriptions
-- User stories and scenarios
-- Acceptance criteria
-- Edge cases and error handling
-- User flows and interactions
-- Data requirements
+**CONSTITUTION**: Purpose, users, principles, non-goals, constraints, governance (e.g. licensing, privacy posture if discussed), UX rules—each grounded in what was actually said.
 
-**CLARIFY Phase**: List specific areas needing clarification:
-- Open questions that need answers
-- Ambiguous requirements
-- Decisions that need to be made
-- Trade-offs to consider
-- Risks and unknowns
+**SPECIFY**: Full feature and behavior description: user-visible controls and flows, interaction modes (drag, click-to-move, etc.), data the app stores, error/edge cases mentioned, acceptance-style criteria tied to named behaviors.
 
-**PLAN Phase**: Detail the implementation approach:
-- Architecture and technical decisions
-- Technology choices and rationale
-- Development phases or milestones
-- Migration paths (if applicable)
-- Integration points
-- Performance and scalability considerations
+**CLARIFY**: Only genuine open questions or ambiguities left in the transcript; avoid padding.
 
-**TASKS Phase**: Provide structured task breakdown:
-- Major work areas
-- Task dependencies
-- Priorities and sequencing
-- Deliverables for each task
+**PLAN**: Stack (languages, frameworks, libraries named), deployment shape, storage, major components, milestone ordering if the user defined it, integration points (APIs, AI, search, etc.).
 
-**Analyze Phase**: Define analysis and evaluation:
-- Success metrics and KPIs
-- How to measure effectiveness
-- User feedback mechanisms
-- Quality criteria
-- Evaluation methods
+**TASKS**: Ordered or grouped work that reflects the real scope discussed (not a generic agile skeleton). Dependencies called out when obvious from the chat.
 
-For each phase, write comprehensive, detailed content (not just bullet points). The Constitution especially should be a well-structured document similar to a project charter.
+**ANALYZE**: Success signals, metrics, testing/beta plans, feedback channels—only from the conversation.
 
-Respond in this format:
-CONSTITUTION: [comprehensive constitution document]
-SPECIFY: [detailed specifications]
-CLARIFY: [specific clarification needs]
-PLAN: [detailed implementation plan]
-TASKS: [structured task breakdown]
-ANALYZE: [analysis and evaluation criteria]"""
+Use markdown headings and bullet lists inside each phase block for clarity. Each phase should read like a dense handoff document, not an executive summary.
+
+**Output format (required, exact labels):**
+CONSTITUTION:
+[content]
+
+SPECIFY:
+[content]
+
+CLARIFY:
+[content]
+
+PLAN:
+[content]
+
+TASKS:
+[content]
+
+ANALYZE:
+[content]"""
         
         messages = full_conversation + [{"role": "user", "content": extraction_prompt}]
         
@@ -242,8 +271,8 @@ ANALYZE: [analysis and evaluation criteria]"""
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.3,  # Lower temperature for more consistent extraction
-                max_tokens=4000  # Increased for more detailed output
+                temperature=0.2,
+                max_tokens=12000,
             )
             
             extracted_text = response.choices[0].message.content

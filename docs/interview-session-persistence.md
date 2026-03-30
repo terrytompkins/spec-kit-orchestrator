@@ -2,6 +2,8 @@
 
 The Spec Kit Orchestrator can save and resume the **parameter-document interview** so you can continue on another computer or after restarting the app.
 
+**See also:** [AI interview and parameter extraction](ai-interview-and-parameter-extraction.md) — how interview vs extraction prompts work, completion triggers, token limits, and manual extraction.
+
 ## How it works
 
 - **Auto-save**: After every exchange in the AI interview (each question and answer), the session is written to a file in the project.

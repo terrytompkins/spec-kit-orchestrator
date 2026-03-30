@@ -9,7 +9,7 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
 ### Key Features
 
 - **Project Creation**: Create new Spec Kit projects through a guided web form without using a terminal
-- **Parameter Generation**: Generate Spec Kit command parameter documents through an interview-style interface (template-based in v1)
+- **Parameter Generation**: Generate Spec Kit command parameter documents through an AI interview (with optional form-based entry), extraction, and export to YAML/Markdown
 - **Phase Execution**: Run Spec Kit phases (Constitution → Specify → Clarify → Plan → Tasks → Analyze) directly from the UI with real-time output streaming
 - **Artifact Browsing**: View and review generated artifacts (constitutions, specs, plans, tasks, etc.) with proper Markdown rendering
 - **Project Discovery**: Discover and work with existing Spec Kit projects in a configured workspace directory
@@ -116,10 +116,11 @@ The application will open in your default web browser at `http://localhost:8501`
    - Project is initialized with `.specify/` directory structure
 
 2. **Generate Parameters** (Optional):
-   - Navigate to "Interview Chat" page
-   - Answer questions about your project/feature
-   - System generates `docs/spec-kit-parameters.md` and `docs/spec-kit-parameters.yml`
+   - Navigate to **Generate Parameter Documents** (interview chat)
+   - Answer questions about your project/feature; the app may auto-run structured extraction when completion heuristics match, or you can use **Extract parameters from conversation now** after enough turns
+   - Optionally click **Generate Parameter Documents** to write `docs/spec-kit-parameters.md` and `docs/spec-kit-parameters.yml`
    - Interview sessions are **auto-saved** so you can resume later or on another computer (see [Interview session persistence](docs/interview-session-persistence.md))
+   - For prompts, triggers, and token limits, see [AI interview and parameter extraction](docs/ai-interview-and-parameter-extraction.md)
 
 3. **Run Spec Kit Phases**:
    - Navigate to "Phase Runner" page
@@ -157,6 +158,7 @@ spec-kit-orchestrator/
 │       │   ├── parameter_generator.py
 │       │   ├── run_metadata.py
 │       │   ├── interview_state.py   # Interview session save/load for resume
+│       │   ├── ai_interview.py      # OpenAI interview + parameter extraction
 │       │   └── config_manager.py
 │       ├── models/                   # Data entities
 │       │   ├── project.py
@@ -231,7 +233,7 @@ This project adheres to the following principles (see `.specify/memory/constitut
 
 - **Local execution only**: Each user runs the app on their own machine (no shared server)
 - **No GitHub PR creation**: PR creation functionality deferred to post-v1
-- **Template-based parameter generation**: Full LLM-powered chat may be deferred to post-v1
+- **Interview tuning**: Completion detection and extraction prompts are code-defined; very long transcripts may approach model context limits (see [docs/ai-interview-and-parameter-extraction.md](docs/ai-interview-and-parameter-extraction.md))
 - **Option 3 features deferred**: Pipeline view and staleness detection UI deferred to post-v1 (architecture readiness implemented)
 
 ## Troubleshooting

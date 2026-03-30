@@ -355,6 +355,42 @@ def main():
                 st.rerun()
         
         return
+
+    # Manual extraction: assistant may have written phase text in chat without triggering auto-detection
+    def _meaningful_user_turns(msgs: list) -> int:
+        return sum(
+            1
+            for m in msgs
+            if m.get("role") == "user" and len((m.get("content") or "").strip()) > 20
+        )
+
+    if (
+        not st.session_state.interview_complete
+        and _meaningful_user_turns(st.session_state.chat_messages) >= 6
+    ):
+        with st.expander("Parameters not finalized automatically?", expanded=False):
+            st.caption(
+                "If the assistant already wrote Spec Kit phase content in the chat but **Command Parameters** is still empty, "
+                "run structured extraction here (one OpenAI call). This saves `generated_parameters` to your project state."
+            )
+            if st.button("Extract parameters from conversation now", type="secondary"):
+                with st.spinner("Extracting parameters from transcript..."):
+                    try:
+                        params = st.session_state.ai_service.extract_parameters_from_transcript(
+                            st.session_state.chat_messages
+                        )
+                        st.session_state.generated_parameters = params
+                        st.session_state.interview_complete = True
+                        interview_state_service.save(
+                            project_path,
+                            st.session_state.chat_messages,
+                            True,
+                            st.session_state.generated_parameters,
+                        )
+                        st.success("Parameters extracted and saved. Open **Command Parameters** to review.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Extraction failed: {e}")
     
     # Chat input
     if prompt := st.chat_input("Type your response here..."):
