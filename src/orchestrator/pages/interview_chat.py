@@ -31,6 +31,9 @@ def initialize_chat_state():
         st.session_state.generated_parameters = None
     if 'ai_service' not in st.session_state:
         st.session_state.ai_service = None
+    # Which project the current in-memory chat state belongs to
+    if 'interview_chat_project' not in st.session_state:
+        st.session_state.interview_chat_project = None
     # Which project we've already chosen Resume/Start new for (so we don't show banner again)
     if 'interview_session_resolved_project' not in st.session_state:
         st.session_state.interview_session_resolved_project = None
@@ -61,6 +64,16 @@ def main():
     if not project_path.exists():
         st.error(f"❌ Project path does not exist: {project_path}")
         return
+    
+    # When user switches to a different project, clear in-memory chat state so we
+    # don't show the previous project's conversation
+    current_project_key = str(project_path)
+    if st.session_state.interview_chat_project != current_project_key:
+        st.session_state.chat_messages = []
+        st.session_state.interview_complete = False
+        st.session_state.generated_parameters = None
+        st.session_state.interview_chat_project = current_project_key
+        st.session_state.interview_session_resolved_project = None
     
     generator = ParameterGenerator(project_path)
     
@@ -342,6 +355,42 @@ def main():
                 st.rerun()
         
         return
+
+    # Manual extraction: assistant may have written phase text in chat without triggering auto-detection
+    def _meaningful_user_turns(msgs: list) -> int:
+        return sum(
+            1
+            for m in msgs
+            if m.get("role") == "user" and len((m.get("content") or "").strip()) > 20
+        )
+
+    if (
+        not st.session_state.interview_complete
+        and _meaningful_user_turns(st.session_state.chat_messages) >= 6
+    ):
+        with st.expander("Parameters not finalized automatically?", expanded=False):
+            st.caption(
+                "If the assistant already wrote Spec Kit phase content in the chat but **Command Parameters** is still empty, "
+                "run structured extraction here (one OpenAI call). This saves `generated_parameters` to your project state."
+            )
+            if st.button("Extract parameters from conversation now", type="secondary"):
+                with st.spinner("Extracting parameters from transcript..."):
+                    try:
+                        params = st.session_state.ai_service.extract_parameters_from_transcript(
+                            st.session_state.chat_messages
+                        )
+                        st.session_state.generated_parameters = params
+                        st.session_state.interview_complete = True
+                        interview_state_service.save(
+                            project_path,
+                            st.session_state.chat_messages,
+                            True,
+                            st.session_state.generated_parameters,
+                        )
+                        st.success("Parameters extracted and saved. Open **Command Parameters** to review.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Extraction failed: {e}")
     
     # Chat input
     if prompt := st.chat_input("Type your response here..."):

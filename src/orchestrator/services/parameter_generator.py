@@ -57,6 +57,7 @@ class ParameterGenerator:
         """
         lines = ["# Spec Kit Command Parameters (Copy/Paste)", ""]
         lines.append("This document contains copy/paste parameter blocks for each Spec Kit phase.")
+        lines.append("Paste each block (or the content inside it) into your IDE **after** the corresponding slash command (e.g. `/speckit.constitution`).")
         lines.append("")
         
         for phase in self.PHASES:
