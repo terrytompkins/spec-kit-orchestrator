@@ -13,6 +13,10 @@ from dotenv import load_dotenv
 from orchestrator.services.parameter_generator import ParameterGenerator
 from orchestrator.services.ai_interview import AIInterviewService
 from orchestrator.services import interview_state as interview_state_service
+from orchestrator.services.knowledge_context import build_reference_bundle, retrieval_query_from_turn
+from orchestrator.services.knowledge_ingest import KnowledgeIngestError, ingest_file
+from orchestrator.services.knowledge_manifest import list_documents
+from orchestrator.services.knowledge_rag_store import store_backend_label
 
 # Note: render_navigation_sidebar() is called in app.py, so we don't call it here
 # to avoid duplication
@@ -37,6 +41,40 @@ def initialize_chat_state():
     # Which project we've already chosen Resume/Start new for (so we don't show banner again)
     if 'interview_session_resolved_project' not in st.session_state:
         st.session_state.interview_session_resolved_project = None
+
+
+def _indexed_doc_ids(project_path: Path) -> list[str]:
+    return [d.id for d in list_documents(project_path) if d.ingestion_status == "indexed"]
+
+
+def _save_interview_state(project_path: Path) -> None:
+    interview_state_service.save(
+        project_path,
+        st.session_state.chat_messages,
+        st.session_state.interview_complete,
+        st.session_state.generated_parameters,
+        active_document_ids=st.session_state.get("knowledge_active_ids", []),
+        session_focus=st.session_state.get("knowledge_session_focus", ""),
+        knowledge_reference_mode=st.session_state.get("knowledge_reference_mode", "auto"),
+    )
+
+
+def _hydrate_knowledge_session(project_path: Path) -> None:
+    state = interview_state_service.load(project_path)
+    indexed = _indexed_doc_ids(project_path)
+    if state and state.get("active_document_ids") is not None:
+        ads = state.get("active_document_ids") or []
+        valid = [x for x in ads if x in indexed]
+        st.session_state.knowledge_active_ids = valid if valid else list(indexed)
+        st.session_state.knowledge_session_focus = state.get("session_focus", "") or ""
+        krm = state.get("knowledge_reference_mode", "auto")
+        st.session_state.knowledge_reference_mode = (
+            krm if krm in ("auto", "prefer_inline", "rag_only") else "auto"
+        )
+    else:
+        st.session_state.knowledge_active_ids = list(indexed)
+        st.session_state.knowledge_session_focus = ""
+        st.session_state.knowledge_reference_mode = "auto"
 
 
 def main():
@@ -74,6 +112,7 @@ def main():
         st.session_state.generated_parameters = None
         st.session_state.interview_chat_project = current_project_key
         st.session_state.interview_session_resolved_project = None
+        st.session_state._knowledge_hydrated_key = None
     
     generator = ParameterGenerator(project_path)
     
@@ -244,6 +283,17 @@ def main():
                     st.session_state.interview_complete = state.get("interview_complete", False)
                     st.session_state.generated_parameters = state.get("generated_parameters")
                     st.session_state.interview_session_resolved_project = str(project_path)
+                    indexed = _indexed_doc_ids(project_path)
+                    ads = state.get("active_document_ids") or []
+                    st.session_state.knowledge_active_ids = [x for x in ads if x in indexed] or list(
+                        indexed
+                    )
+                    st.session_state.knowledge_session_focus = state.get("session_focus", "") or ""
+                    krm = state.get("knowledge_reference_mode", "auto")
+                    st.session_state.knowledge_reference_mode = (
+                        krm if krm in ("auto", "prefer_inline", "rag_only") else "auto"
+                    )
+                    st.session_state._knowledge_hydrated_key = str(project_path)
                     st.rerun()
         with col_new:
             if st.button("Start new", key="interview_start_new"):
@@ -251,18 +301,109 @@ def main():
                 st.session_state.interview_complete = False
                 st.session_state.generated_parameters = None
                 st.session_state.interview_session_resolved_project = str(project_path)
+                st.session_state.knowledge_active_ids = _indexed_doc_ids(project_path)
+                st.session_state.knowledge_session_focus = ""
+                st.session_state.knowledge_reference_mode = "auto"
+                st.session_state._knowledge_hydrated_key = str(project_path)
                 interview_state_service.save(
                     project_path,
                     [],
                     False,
                     None,
+                    active_document_ids=st.session_state.knowledge_active_ids,
+                    session_focus="",
+                    knowledge_reference_mode="auto",
                 )
                 st.rerun()
         return
     
     # Mark that we've resolved resume/start new for this project (so we don't show banner again)
     st.session_state.interview_session_resolved_project = str(project_path)
-    
+
+    if st.session_state.get("_knowledge_hydrated_key") != str(project_path):
+        st.session_state._knowledge_hydrated_key = str(project_path)
+        _hydrate_knowledge_session(project_path)
+
+    with st.expander("📎 Project knowledge (uploads & RAG)", expanded=False):
+        st.caption(
+            "Files are stored under `.specify/orchestrator/knowledge/` in this project (suitable to commit). "
+            "Embeddings live in `rag.sqlite` (often gitignored—reindex from **Project knowledge** page after clone). "
+            "Content may be sent to OpenAI for chat and embeddings."
+        )
+        try:
+            st.caption(f"Vector backend: **{store_backend_label(project_path)}**")
+        except Exception:
+            pass
+        uploaded = st.file_uploader(
+            "Add documents",
+            type=["txt", "md", "pdf", "docx", "csv", "json", "yml", "yaml"],
+            accept_multiple_files=True,
+            help="Drag and drop or browse. Supported: .txt, .md, .pdf, .docx, and common text configs.",
+        )
+        if uploaded:
+            for uf in uploaded:
+                if uf is None:
+                    continue
+                try:
+                    data = uf.getvalue()
+                    with st.spinner(f"Indexing {uf.name}…"):
+                        ingest_file(
+                            project_path,
+                            data,
+                            uf.name,
+                            uf.type or "application/octet-stream",
+                            st.session_state.ai_service.client,
+                        )
+                    st.success(f"Indexed: {uf.name}")
+                except KnowledgeIngestError as e:
+                    st.error(f"{uf.name}: {e}")
+                except Exception as e:
+                    st.error(f"{uf.name}: {e}")
+            st.session_state.knowledge_active_ids = _indexed_doc_ids(project_path)
+            st.rerun()
+
+        all_docs = list_documents(project_path)
+        indexed = [d for d in all_docs if d.ingestion_status == "indexed"]
+        if indexed:
+            labels = {d.id: f"{d.original_filename} ({d.ingestion_mode})" for d in indexed}
+            valid_sel = [x for x in st.session_state.get("knowledge_active_ids", []) if x in labels]
+            chosen = st.multiselect(
+                "Active documents for this interview",
+                options=list(labels.keys()),
+                default=valid_sel or list(labels.keys()),
+                format_func=lambda i: labels.get(i, i),
+                help="Only selected documents are used for inline text and retrieval.",
+                key=f"knowledge_active_ms_{str(project_path)}",
+            )
+            st.session_state.knowledge_active_ids = chosen
+            _modes = ("auto", "prefer_inline", "rag_only")
+            _cur = st.session_state.get("knowledge_reference_mode", "auto")
+            if _cur not in _modes:
+                _cur = "auto"
+            st.session_state.knowledge_reference_mode = st.radio(
+                "Reference mode (session)",
+                options=list(_modes),
+                format_func=lambda x: {
+                    "auto": "Auto (small docs inline, large via search)",
+                    "prefer_inline": "Prefer full text in context (truncates if needed)",
+                    "rag_only": "Retrieval only (no full-document inline)",
+                }[x],
+                index=_modes.index(_cur),
+                horizontal=True,
+            )
+            st.session_state.knowledge_session_focus = st.text_input(
+                "Session focus (optional)",
+                value=st.session_state.get("knowledge_session_focus", ""),
+                placeholder="e.g. Current feature: checkout — ignore HR handbook sections",
+                help="Free-text hint; stored with your interview state. The model sees your chat first—use this to steer emphasis.",
+            )
+            if st.session_state.knowledge_session_focus.strip():
+                st.caption("Focus hint is saved with the session; chat remains the main source of truth.")
+        else:
+            st.session_state.knowledge_active_ids = []
+        if st.button("Open Project knowledge manager →", key="open_knowledge_mgr"):
+            st.switch_page("pages/knowledge.py")
+
     # AI Chat Interface
     st.info("""
     **AI-Powered Interview Chat**
@@ -282,12 +423,7 @@ def main():
             "role": "assistant",
             "content": initial_question
         })
-        interview_state_service.save(
-            project_path,
-            st.session_state.chat_messages,
-            st.session_state.interview_complete,
-            st.session_state.generated_parameters,
-        )
+        _save_interview_state(project_path)
     
     # Display chat messages
     for message in st.session_state.chat_messages:
@@ -351,7 +487,18 @@ def main():
                 st.session_state.chat_messages = []
                 st.session_state.interview_complete = False
                 st.session_state.generated_parameters = None
-                interview_state_service.save(project_path, [], False, None)
+                st.session_state.knowledge_active_ids = _indexed_doc_ids(project_path)
+                st.session_state.knowledge_session_focus = ""
+                st.session_state.knowledge_reference_mode = "auto"
+                interview_state_service.save(
+                    project_path,
+                    [],
+                    False,
+                    None,
+                    active_document_ids=st.session_state.knowledge_active_ids,
+                    session_focus="",
+                    knowledge_reference_mode="auto",
+                )
                 st.rerun()
         
         return
@@ -376,17 +523,25 @@ def main():
             if st.button("Extract parameters from conversation now", type="secondary"):
                 with st.spinner("Extracting parameters from transcript..."):
                     try:
+                        tail = st.session_state.chat_messages[-12:]
+                        ext_q = "\n".join(
+                            (m.get("content") or "") for m in tail if m.get("role") == "user"
+                        )[-8000:]
+                        ref_bundle = build_reference_bundle(
+                            project_path,
+                            st.session_state.get("knowledge_active_ids", []),
+                            st.session_state.get("knowledge_reference_mode", "auto"),
+                            ext_q or "spec kit parameters interview",
+                            st.session_state.ai_service.client,
+                            session_focus=st.session_state.get("knowledge_session_focus", ""),
+                        )
                         params = st.session_state.ai_service.extract_parameters_from_transcript(
-                            st.session_state.chat_messages
+                            st.session_state.chat_messages,
+                            reference_bundle=ref_bundle or None,
                         )
                         st.session_state.generated_parameters = params
                         st.session_state.interview_complete = True
-                        interview_state_service.save(
-                            project_path,
-                            st.session_state.chat_messages,
-                            True,
-                            st.session_state.generated_parameters,
-                        )
+                        _save_interview_state(project_path)
                         st.success("Parameters extracted and saved. Open **Command Parameters** to review.")
                         st.rerun()
                     except Exception as e:
@@ -408,10 +563,21 @@ def main():
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    # Conduct interview step
+                    ref_query = retrieval_query_from_turn(
+                        prompt, st.session_state.chat_messages[:-1]
+                    )
+                    ref_bundle = build_reference_bundle(
+                        project_path,
+                        st.session_state.get("knowledge_active_ids", []),
+                        st.session_state.get("knowledge_reference_mode", "auto"),
+                        ref_query,
+                        st.session_state.ai_service.client,
+                        session_focus=st.session_state.get("knowledge_session_focus", ""),
+                    )
                     result = st.session_state.ai_service.conduct_interview_step(
-                        st.session_state.chat_messages[:-1],  # All messages except the one we just added
-                        prompt
+                        st.session_state.chat_messages[:-1],
+                        prompt,
+                        reference_bundle=ref_bundle or None,
                     )
                     
                     if result["is_complete"]:
@@ -425,12 +591,7 @@ def main():
                         
                         st.session_state.generated_parameters = result["parameters"]
                         st.session_state.interview_complete = True
-                        interview_state_service.save(
-                            project_path,
-                            st.session_state.chat_messages,
-                            True,
-                            st.session_state.generated_parameters,
-                        )
+                        _save_interview_state(project_path)
                         st.success("✅ I've gathered enough information. Ready to generate parameters!")
                         st.rerun()
                     else:
@@ -441,12 +602,7 @@ def main():
                             "role": "assistant",
                             "content": question
                         })
-                        interview_state_service.save(
-                            project_path,
-                            st.session_state.chat_messages,
-                            st.session_state.interview_complete,
-                            st.session_state.generated_parameters,
-                        )
+                        _save_interview_state(project_path)
                 
                 except Exception as e:
                     error_msg = f"❌ Error during interview: {str(e)}"
@@ -455,12 +611,7 @@ def main():
                         "role": "assistant",
                         "content": error_msg
                     })
-                    interview_state_service.save(
-                        project_path,
-                        st.session_state.chat_messages,
-                        st.session_state.interview_complete,
-                        st.session_state.generated_parameters,
-                    )
+                    _save_interview_state(project_path)
 
 
 # When used with st.navigation(), Streamlit executes this file directly

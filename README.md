@@ -14,6 +14,7 @@ Spec Kit Orchestrator bridges the gap between business needs and technical execu
 - **Artifact Browsing**: View and review generated artifacts (constitutions, specs, plans, tasks, etc.) with proper Markdown rendering
 - **Project Discovery**: Discover and work with existing Spec Kit projects in a configured workspace directory
 - **Execution History**: Complete audit trail of all phase executions with metadata, logs, and timestamps
+- **Project knowledge (RAG)**: Upload reference documents (for example `.pdf`, `.docx`, `.md`, `.txt`) under `.specify/orchestrator/knowledge/` in the selected Spec Kit project; embeddings are stored in `rag.sqlite` (gitignored by default—use **Project knowledge → Reindex all** after clone). The interview uses the **chat as source of truth** and treats uploads as unverified until you confirm them in the conversation.
 
 ## Requirements
 
@@ -116,11 +117,13 @@ The application will open in your default web browser at `http://localhost:8501`
    - Project is initialized with `.specify/` directory structure
 
 2. **Generate Parameters** (Optional):
-   - Navigate to **Generate Parameter Documents** (interview chat)
+   - Navigate to **Interview Chat** (Generate Parameter Documents)
+   - Optional: expand **Project knowledge** to upload documents, choose **active** files for this session, set **Reference mode** (auto / prefer full text / retrieval only), and add a **Session focus** hint; manage files and reindex on the **Project knowledge** page
    - Answer questions about your project/feature; the app may auto-run structured extraction when completion heuristics match, or you can use **Extract parameters from conversation now** after enough turns
    - Optionally click **Generate Parameter Documents** to write `docs/spec-kit-parameters.md` and `docs/spec-kit-parameters.yml`
-   - Interview sessions are **auto-saved** so you can resume later or on another computer (see [Interview session persistence](docs/interview-session-persistence.md))
+   - Interview sessions are **auto-saved** so you can resume later or on another computer (see [Interview session persistence](docs/interview-session-persistence.md)); `interview_state.json` also stores active knowledge document IDs, session focus, and reference mode
    - For prompts, triggers, and token limits, see [AI interview and parameter extraction](docs/ai-interview-and-parameter-extraction.md)
+   - Uploaded content is sent to OpenAI for **chat completions and embeddings** when you use the interview with knowledge enabled
 
 3. **Run Spec Kit Phases**:
    - Navigate to "Phase Runner" page
@@ -148,7 +151,8 @@ spec-kit-orchestrator/
 │       ├── pages/                    # Streamlit multi-page structure
 │       │   ├── project_creation.py   # New project wizard
 │       │   ├── project_selection.py  # Project discovery and selection
-│       │   ├── interview_chat.py     # Parameter generation chat
+│       │   ├── interview_chat.py     # Parameter generation chat (+ knowledge expander)
+│       │   ├── knowledge.py          # Knowledge manager (upload, reindex, delete)
 │       │   ├── phase_runner.py       # Phase execution UI
 │       │   └── artifact_browser.py  # Artifact viewing
 │       ├── services/                 # Business logic layer
@@ -157,8 +161,9 @@ spec-kit-orchestrator/
 │       │   ├── artifact_reader.py
 │       │   ├── parameter_generator.py
 │       │   ├── run_metadata.py
-│       │   ├── interview_state.py   # Interview session save/load for resume
+│       │   ├── interview_state.py   # Interview session save/load for resume (+ knowledge session fields)
 │       │   ├── ai_interview.py      # OpenAI interview + parameter extraction
+│       │   ├── knowledge_*.py       # Manifest, ingest, RAG store (sqlite-vec + fallback), context builder
 │       │   └── config_manager.py
 │       ├── models/                   # Data entities
 │       │   ├── project.py
@@ -234,6 +239,7 @@ This project adheres to the following principles (see `.specify/memory/constitut
 - **Local execution only**: Each user runs the app on their own machine (no shared server)
 - **No GitHub PR creation**: PR creation functionality deferred to post-v1
 - **Interview tuning**: Completion detection and extraction prompts are code-defined; very long transcripts may approach model context limits (see [docs/ai-interview-and-parameter-extraction.md](docs/ai-interview-and-parameter-extraction.md))
+- **Knowledge / RAG**: If the `sqlite-vec` extension fails to load, the app falls back to cosine search over embeddings stored as BLOBs (fine for typical local corpora). After cloning a repo, run **Project knowledge → Reindex all** if `rag.sqlite` was not committed
 - **Option 3 features deferred**: Pipeline view and staleness detection UI deferred to post-v1 (architecture readiness implemented)
 
 ## Troubleshooting

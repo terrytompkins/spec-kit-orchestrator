@@ -59,6 +59,8 @@ htmlcov/
 
 # Project-specific
 .specify/orchestrator/runs/
+# Rebuild with Project knowledge → Reindex all (embeddings are reproducible from files + manifest)
+.specify/orchestrator/knowledge/rag.sqlite
 *.pyc
 *.pyo
 

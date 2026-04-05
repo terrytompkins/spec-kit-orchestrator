@@ -54,7 +54,12 @@ The Spec Kit phases need:
 Ask ONE question at a time. Be conversational but thorough. Only suggest generating parameters when you have comprehensive, detailed information.
 
 When the interview is complete, a separate step will turn this transcript into Spec Kit phase parameters: **specific names (controls, APIs, platforms), flows, and decisions stated here should survive into that output**—so prefer precise, concrete answers from the user rather than vague themes."""
-    
+
+    _REFERENCE_SYSTEM_ADDENDUM = """
+
+## Uploaded reference documents (when provided)
+A separate user-role message may contain text from files the user uploaded. That material is **not automatically confirmed** by the user. Use it to ask better questions and to suggest details they should validate. **The live chat remains authoritative**: if a document disagrees with the user, follow the user and clarify. Do not treat uploads as decisions until the user agrees in the conversation."""
+
     def get_initial_question(self) -> str:
         """Get the first question to start the interview."""
         return "Hello! I'm here to help you generate Spec Kit command parameters for your project. Let's start with the basics: What project or feature are you planning to build? Please describe it in a few sentences."
@@ -62,7 +67,8 @@ When the interview is complete, a separate step will turn this transcript into S
     def conduct_interview_step(
         self,
         conversation_history: List[Dict[str, str]],
-        user_response: str
+        user_response: str,
+        reference_bundle: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Conduct one step of the interview.
@@ -70,6 +76,7 @@ When the interview is complete, a separate step will turn this transcript into S
         Args:
             conversation_history: List of previous messages in format [{"role": "user/assistant", "content": "..."}]
             user_response: User's response to the previous question
+            reference_bundle: Optional project-knowledge text (inline + RAG); injected after system prompt.
         
         Returns:
             Dictionary with:
@@ -77,12 +84,14 @@ When the interview is complete, a separate step will turn this transcript into S
                 - "parameters": Generated parameters dict (or None if not ready)
                 - "is_complete": Boolean indicating if interview is done
         """
-        # Add user response to history
-        messages = [
-            {"role": "system", "content": self.system_prompt}
-        ] + conversation_history + [
-            {"role": "user", "content": user_response}
-        ]
+        sys_content = self.system_prompt
+        if reference_bundle:
+            sys_content = sys_content + self._REFERENCE_SYSTEM_ADDENDUM
+        messages: List[Dict[str, str]] = [{"role": "system", "content": sys_content}]
+        if reference_bundle:
+            messages.append({"role": "user", "content": reference_bundle})
+        messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_response})
         
         # Call OpenAI API
         try:
@@ -101,7 +110,9 @@ When the interview is complete, a separate step will turn this transcript into S
                 assistant_message, conversation_history, user_response
             ):
                 # Generate parameters
-                parameters = self._generate_parameters(messages + [{"role": "assistant", "content": assistant_message}])
+                parameters = self._generate_parameters(
+                    messages + [{"role": "assistant", "content": assistant_message}]
+                )
                 return {
                     "question": None,
                     "parameters": parameters,
@@ -200,14 +211,24 @@ When the interview is complete, a separate step will turn this transcript into S
             user_wants_generate and has_enough_exchanges
         )
 
-    def extract_parameters_from_transcript(self, chat_messages: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
+    def extract_parameters_from_transcript(
+        self,
+        chat_messages: List[Dict[str, str]],
+        reference_bundle: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Run structured parameter extraction over the full chat transcript.
 
         Use when the model produced parameters in prose but automatic completion
         detection did not run (so interview_state never got generated_parameters).
         """
-        messages = [{"role": "system", "content": self.system_prompt}] + list(chat_messages)
+        sys_content = self.system_prompt
+        if reference_bundle:
+            sys_content = sys_content + self._REFERENCE_SYSTEM_ADDENDUM
+        messages: List[Dict[str, str]] = [{"role": "system", "content": sys_content}]
+        if reference_bundle:
+            messages.append({"role": "user", "content": reference_bundle})
+        messages.extend(list(chat_messages))
         return self._generate_parameters(messages)
     
     def _generate_parameters(self, full_conversation: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
@@ -229,6 +250,7 @@ When the interview is complete, a separate step will turn this transcript into S
 3. **Attribution of decisions**: When the user chose among options (e.g. local-first vs cloud, framework, interaction model), state the decision and the rationale as discussed—not a new rationale.
 4. **Place detail in the right phase**: UX and product rules → CONSTITUTION where appropriate; feature behavior, stories, criteria, edge cases → SPECIFY; still-open items only → CLARIFY; stack, architecture, milestones, integrations → PLAN; implementable work units → TASKS; metrics, feedback, success definition → ANALYZE.
 5. **If something was not discussed**, you may mark it briefly as NEEDS CLARIFICATION in CLARIFY rather than inventing detail.
+6. **Uploaded reference material**: If a reference block was included above the transcript, treat it as **supplementary**. If a fact appears only there and the user never confirmed it in chat, put it in CLARIFY as needing user confirmation (or omit)—do not record it as a decided requirement.
 
 **Per-phase content expectations:**
 

@@ -108,6 +108,11 @@ pages = [
         icon="💬"
     ),
     st.Page(
+        str((pages_dir / "knowledge.py").resolve()),
+        title="Project knowledge",
+        icon="📚"
+    ),
+    st.Page(
         str((pages_dir / "command_parameters.py").resolve()),
         title="Command Parameters",
         icon="📋"
